@@ -19,8 +19,8 @@ from custom_components.mytnb.const import (
     DOMAIN,
 )
 from custom_components.mytnb.sensor import (
-    MyTNBSensor,
     SENSOR_DESCRIPTIONS,
+    MyTNBSensor,
     async_setup_entry,
 )
 from tests.conftest import create_mock_account_data

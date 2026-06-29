@@ -7,6 +7,7 @@ import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
 from mytnb import MyTNBClient
 from mytnb.exceptions import APIError, AuthenticationError, MyTNBError
 
