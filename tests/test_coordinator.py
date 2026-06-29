@@ -152,7 +152,7 @@ async def test_coordinator_generic_error_raises_update_failed(
     coordinator = MyTNBDataUpdateCoordinator(
         hass, "test@example.com", "testpassword"
     )
-    coordinator._client = mock_client
+    coordinator._get_client = AsyncMock(return_value=mock_client)
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
@@ -172,7 +172,7 @@ async def test_coordinator_api_error_raises_update_failed(
     coordinator = MyTNBDataUpdateCoordinator(
         hass, "test@example.com", "testpassword"
     )
-    coordinator._client = mock_client
+    coordinator._get_client = AsyncMock(return_value=mock_client)
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()

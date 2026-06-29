@@ -4,23 +4,27 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.mytnb.config_flow import MyTNBConfigFlow
+from custom_components.mytnb.const import DOMAIN
+
+
+async def _start_flow(hass: HomeAssistant):
+    """Start the config flow and return the flow ID."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "user"
+    return result["flow_id"]
 
 
 async def test_show_form(hass: HomeAssistant) -> None:
     """Test that the config flow shows the user form."""
-    flow = MyTNBConfigFlow()
-    flow.hass = hass
-
-    result = await flow.async_step_user()
-
-    assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "user"
-    assert result["errors"] == {}
+    await _start_flow(hass)
 
 
 async def test_successful_login(
@@ -28,14 +32,14 @@ async def test_successful_login(
     mock_mytnb_client,
 ) -> None:
     """Test a successful config flow."""
-    flow = MyTNBConfigFlow()
-    flow.hass = hass
+    flow_id = await _start_flow(hass)
 
-    result = await flow.async_step_user(
+    result = await hass.config_entries.flow.async_configure(
+        flow_id,
         {
             CONF_EMAIL: "test@example.com",
             CONF_PASSWORD: "testpassword",
-        }
+        },
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -49,17 +53,18 @@ async def test_duplicate_entry(
     mock_mytnb_client,
 ) -> None:
     """Test duplicate config entry is aborted."""
-    flow = MyTNBConfigFlow()
-    flow.hass = hass
-    flow._async_current_entries = lambda: [
-        type("MockEntry", (), {"unique_id": "test@example.com"})(),
-    ]
+    flow_id = await _start_flow(hass)
 
-    result = await flow.async_step_user(
+    await hass.config_entries.flow.async_configure(
+        flow_id,
         {
             CONF_EMAIL: "test@example.com",
             CONF_PASSWORD: "testpassword",
-        }
+        },
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
     )
 
     assert result["type"] == FlowResultType.ABORT
@@ -72,18 +77,18 @@ async def test_auth_error(
     """Test authentication error during config flow."""
     from mytnb.exceptions import AuthenticationError
 
+    flow_id = await _start_flow(hass)
+
     with patch(
         "mytnb.MyTNBClient.login",
         side_effect=AuthenticationError("auth failed"),
     ):
-        flow = MyTNBConfigFlow()
-        flow.hass = hass
-
-        result = await flow.async_step_user(
+        result = await hass.config_entries.flow.async_configure(
+            flow_id,
             {
                 CONF_EMAIL: "test@example.com",
                 CONF_PASSWORD: "wrong",
-            }
+            },
         )
 
     assert result["type"] == FlowResultType.FORM
@@ -96,18 +101,18 @@ async def test_geo_blocked_error(
     """Test geo-blocked error during config flow."""
     from mytnb.exceptions import GeoBlockedError
 
+    flow_id = await _start_flow(hass)
+
     with patch(
         "mytnb.MyTNBClient.login",
         side_effect=GeoBlockedError(),
     ):
-        flow = MyTNBConfigFlow()
-        flow.hass = hass
-
-        result = await flow.async_step_user(
+        result = await hass.config_entries.flow.async_configure(
+            flow_id,
             {
                 CONF_EMAIL: "test@example.com",
                 CONF_PASSWORD: "testpassword",
-            }
+            },
         )
 
     assert result["type"] == FlowResultType.FORM
@@ -120,15 +125,18 @@ async def test_api_error(
     """Test API error during config flow."""
     from mytnb.exceptions import APIError
 
-    with patch("mytnb.MyTNBClient.login", side_effect=APIError("api failed")):
-        flow = MyTNBConfigFlow()
-        flow.hass = hass
+    flow_id = await _start_flow(hass)
 
-        result = await flow.async_step_user(
+    with patch(
+        "mytnb.MyTNBClient.login",
+        side_effect=APIError("api failed"),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            flow_id,
             {
                 CONF_EMAIL: "test@example.com",
                 CONF_PASSWORD: "testpassword",
-            }
+            },
         )
 
     assert result["type"] == FlowResultType.FORM

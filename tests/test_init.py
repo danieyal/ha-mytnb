@@ -15,23 +15,29 @@ from custom_components.mytnb import (
 )
 from custom_components.mytnb.const import DOMAIN
 
+_BASE_ENTRY = {
+    "version": 1,
+    "minor_version": 1,
+    "domain": DOMAIN,
+    "data": {},
+    "options": {},
+    "source": "user",
+    "discovery_keys": {},
+    "unique_id": None,
+    "subentries_data": (),
+}
+
 
 async def test_setup_entry(hass: HomeAssistant, mock_mytnb_client) -> None:
     """Test setting up a config entry."""
     entry = ConfigEntry(
-        version=1,
-        minor_version=1,
-        domain=DOMAIN,
+        **_BASE_ENTRY,
         title="myTNB (test@example.com)",
         data={
             CONF_EMAIL: "test@example.com",
             CONF_PASSWORD: "testpassword",
         },
-        options={},
-        source="user",
         entry_id="test_entry_id",
-        discovery_keys={},
-        unique_id=None,
     )
 
     with (
@@ -67,16 +73,10 @@ async def test_unload_entry(hass: HomeAssistant) -> None:
     hass.data[DOMAIN]["test_entry_id"] = mock_coordinator
 
     entry = ConfigEntry(
-        version=1,
-        minor_version=1,
-        domain=DOMAIN,
+        **_BASE_ENTRY,
         title="myTNB",
         data={CONF_EMAIL: "test@example.com", CONF_PASSWORD: "pw"},
-        options={},
-        source="user",
         entry_id="test_entry_id",
-        discovery_keys={},
-        unique_id=None,
     )
     entry.runtime_data = mock_coordinator
 
@@ -100,16 +100,10 @@ async def test_unload_entry_platform_failure(hass: HomeAssistant) -> None:
     hass.data[DOMAIN]["test_entry_id"] = mock_coordinator
 
     entry = ConfigEntry(
-        version=1,
-        minor_version=1,
-        domain=DOMAIN,
+        **_BASE_ENTRY,
         title="myTNB",
         data={CONF_EMAIL: "test@example.com", CONF_PASSWORD: "pw"},
-        options={},
-        source="user",
         entry_id="test_entry_id",
-        discovery_keys={},
-        unique_id=None,
     )
     entry.runtime_data = mock_coordinator
 
@@ -127,16 +121,10 @@ async def test_unload_entry_platform_failure(hass: HomeAssistant) -> None:
 async def test_migrate_entry_v1(hass: HomeAssistant) -> None:
     """Test migrating from version 1 (current version)."""
     entry = ConfigEntry(
-        version=1,
-        minor_version=1,
-        domain=DOMAIN,
+        **_BASE_ENTRY,
         title="myTNB",
         data={CONF_EMAIL: "test@example.com", CONF_PASSWORD: "pw"},
-        options={},
-        source="user",
         entry_id="test",
-        discovery_keys={},
-        unique_id=None,
     )
     result = await async_migrate_entry(hass, entry)
     assert result is True
@@ -145,16 +133,10 @@ async def test_migrate_entry_v1(hass: HomeAssistant) -> None:
 async def test_migrate_entry_unknown(hass: HomeAssistant) -> None:
     """Test migration from unknown version returns False."""
     entry = ConfigEntry(
+        **_BASE_ENTRY,
         version=99,
-        minor_version=1,
-        domain=DOMAIN,
         title="myTNB",
-        data={},
-        options={},
-        source="user",
         entry_id="test",
-        discovery_keys={},
-        unique_id=None,
     )
     result = await async_migrate_entry(hass, entry)
     assert result is False

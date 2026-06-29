@@ -6,6 +6,6 @@
   "documentation": "https://github.com/danieyal/ha-mytnb",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/danieyal/ha-mytnb/issues",
-  "requirements": ["python-mytnb>=1.0.0"],
+  "requirements": ["python-mytnb>=0.2.0"],
   "version": "1.0.0"
 }

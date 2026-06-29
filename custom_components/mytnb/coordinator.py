@@ -47,6 +47,8 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
 
         except (APIError, MyTNBError) as err:
             raise UpdateFailed(f"API error: {err}") from err
+        except Exception as err:
+            raise UpdateFailed(f"Unexpected error: {err}") from err
 
         data: dict[str, dict] = {}
         for acc, result in zip(accounts, results, strict=True):
