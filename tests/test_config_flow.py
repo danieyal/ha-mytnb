@@ -72,7 +72,10 @@ async def test_auth_error(
     """Test authentication error during config flow."""
     from mytnb.exceptions import AuthenticationError
 
-    with patch("mytnb.MyTNBClient.login", side_effect=AuthenticationError):
+    with patch(
+        "mytnb.MyTNBClient.login",
+        side_effect=AuthenticationError("auth failed"),
+    ):
         flow = MyTNBConfigFlow()
         flow.hass = hass
 
@@ -93,7 +96,7 @@ async def test_geo_blocked_error(
     """Test geo-blocked error during config flow."""
     from mytnb.exceptions import GeoBlockedError
 
-    with patch("mytnb.MyTNBClient.login", side_effect=GeoBlockedError):
+    with patch("mytnb.MyTNBClient.login", side_effect=GeoBlockedError("geo blocked")):
         flow = MyTNBConfigFlow()
         flow.hass = hass
 
@@ -114,7 +117,7 @@ async def test_api_error(
     """Test API error during config flow."""
     from mytnb.exceptions import APIError
 
-    with patch("mytnb.MyTNBClient.login", side_effect=APIError):
+    with patch("mytnb.MyTNBClient.login", side_effect=APIError("api failed")):
         flow = MyTNBConfigFlow()
         flow.hass = hass
 

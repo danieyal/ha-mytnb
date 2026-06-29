@@ -25,6 +25,12 @@ DATA_SCHEMA = vol.Schema(
 )
 
 
+async def _validate_login(email: str, password: str) -> None:
+    """Validate login credentials and account discovery."""
+    client = await MyTNBClient.login(email, password)
+    await client.get_customer_accounts()
+
+
 class MyTNBConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for myTNB."""
 
@@ -41,9 +47,9 @@ class MyTNBConfigFlow(ConfigFlow, domain=DOMAIN):
             password = user_input[CONF_PASSWORD]
 
             try:
-                async with asyncio.timeout(30):
-                    client = await MyTNBClient.login(email, password)
-                    await client.get_customer_accounts()
+                await asyncio.wait_for(
+                    _validate_login(email, password), timeout=30
+                )
             except AuthenticationError:
                 errors["base"] = "auth"
             except GeoBlockedError:

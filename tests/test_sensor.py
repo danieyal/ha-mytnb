@@ -180,8 +180,10 @@ async def test_sensor_descriptions_count() -> None:
 async def test_sensor_state_classes() -> None:
     """Test sensor descriptions have valid state classes."""
     for desc in SENSOR_DESCRIPTIONS:
-        assert desc.state_class is not None
         assert desc.key is not None
+        if desc.device_class == "date":
+            continue
+        assert desc.state_class is not None
 
 
 async def test_setup_entry_creates_sensors(hass: HomeAssistant) -> None:

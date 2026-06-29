@@ -36,15 +36,16 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         client = await self._get_client()
 
         try:
-            async with asyncio.timeout(60):
-                accounts = await client.get_customer_accounts()
-                _LOGGER.debug("Discovered %d accounts", len(accounts))
+            accounts = await asyncio.wait_for(
+                client.get_customer_accounts(), timeout=60
+            )
+            _LOGGER.debug("Discovered %d accounts", len(accounts))
 
-                tasks = [
-                    self._fetch_account_data(client, acc.account_number)
-                    for acc in accounts
-                ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+            tasks = [
+                self._fetch_account_data(client, acc.account_number)
+                for acc in accounts
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
         except TimeoutError:
             raise UpdateFailed("Timeout fetching accounts") from None

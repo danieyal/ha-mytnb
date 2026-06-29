@@ -89,7 +89,7 @@ async def test_coordinator_relogin_on_auth_error(
 
     mock_client1 = create_mock_client()
     mock_client1.get_customer_accounts = AsyncMock(
-        side_effect=AuthenticationError
+        side_effect=AuthenticationError("session expired")
     )
     mock_client2 = create_mock_client()
 
@@ -166,7 +166,7 @@ async def test_coordinator_api_error_raises_update_failed(
 
     mock_client = create_mock_client()
     mock_client.get_customer_accounts = AsyncMock(
-        side_effect=APIError
+        side_effect=APIError("api failed")
     )
 
     coordinator = MyTNBDataUpdateCoordinator(
