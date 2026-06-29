@@ -11,9 +11,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from custom_components.mytnb.coordinator import MyTNBDataUpdateCoordinator
 from tests.conftest import (
     MockAccountUsage,
-    MockBillEntry,
     MockCustomerAccount,
-    MockDueAmount,
     create_mock_client,
 )
 
@@ -72,6 +70,7 @@ async def test_coordinator_login_on_first_use(
     coordinator._client = None
 
     import mytnb
+
     original = mytnb.MyTNBClient.login
     mytnb.MyTNBClient.login = AsyncMock(return_value=mock_client)
 
@@ -100,6 +99,7 @@ async def test_coordinator_relogin_on_auth_error(
     coordinator._client = mock_client1
 
     import mytnb
+
     original = mytnb.MyTNBClient.login
     mytnb.MyTNBClient.login = AsyncMock(return_value=mock_client2)
 
@@ -144,11 +144,9 @@ async def test_coordinator_timeout_raises_update_failed(
     hass: HomeAssistant,
 ) -> None:
     """Test timeout raises UpdateFailed."""
-    import asyncio
-
     mock_client = create_mock_client()
     mock_client.get_customer_accounts = AsyncMock(
-        side_effect=asyncio.TimeoutError
+        side_effect=TimeoutError
     )
 
     coordinator = MyTNBDataUpdateCoordinator(

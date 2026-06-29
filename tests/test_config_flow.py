@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-import pytest
-from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
-from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.mytnb.config_flow import MyTNBConfigFlow
-from custom_components.mytnb.const import DOMAIN
 
 
 async def test_show_form(hass: HomeAssistant) -> None:

@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
 from custom_components.mytnb import (
+    async_migrate_entry,
     async_setup_entry,
     async_unload_entry,
-    async_migrate_entry,
 )
 from custom_components.mytnb.const import DOMAIN
 

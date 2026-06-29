@@ -36,6 +36,13 @@ _LOGGER = logging.getLogger(__name__)
 CURRENCY_RM = "RM"
 
 
+def _safe_isoformat(value: date | datetime | str) -> str:
+    """Return ISO format string for a date/datetime, or the value as-is."""
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    return value
+
+
 @dataclass(frozen=True, kw_only=True)
 class MyTNBSensorEntityDescription(SensorEntityDescription):
     """Description for a myTNB sensor derived from a single account."""
@@ -215,7 +222,7 @@ class MyTNBSensor(CoordinatorEntity, SensorEntity):
         if bill_history:
             attrs[ATTR_BILL_HISTORY] = [
                 {
-                    "date": bill.date.isoformat() if isinstance(bill.date, (date, datetime)) else bill.date,
+                    "date": _safe_isoformat(bill.date),
                     "amount": bill.amount,
                 }
                 for bill in bill_history
@@ -237,7 +244,7 @@ class MyTNBSensor(CoordinatorEntity, SensorEntity):
         if usage and usage.daily and usage.daily.days:
             attrs[ATTR_DAILY_USAGE] = [
                 {
-                    "date": day.date.isoformat() if isinstance(day.date, (date, datetime)) else day.date,
+                    "date": _safe_isoformat(day.date),
                     "usage": day.usage,
                     "cost": day.cost,
                 }

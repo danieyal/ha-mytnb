@@ -7,11 +7,10 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-from mytnb import MyTNBClient
-from mytnb.exceptions import APIError, AuthenticationError, GeoBlockedError, MyTNBError
-
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
+from mytnb import MyTNBClient
+from mytnb.exceptions import APIError, AuthenticationError, GeoBlockedError, MyTNBError
 
 from .const import DOMAIN
 
@@ -43,7 +42,7 @@ class MyTNBConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 async with asyncio.timeout(30):
                     client = await MyTNBClient.login(email, password)
-                    accounts = await client.get_customer_accounts()
+                    await client.get_customer_accounts()
             except AuthenticationError:
                 errors["base"] = "auth"
             except GeoBlockedError:
@@ -52,7 +51,7 @@ class MyTNBConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "api_error"
             except MyTNBError:
                 errors["base"] = "unknown"
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 errors["base"] = "api_error"
             else:
                 await self.async_set_unique_id(email)

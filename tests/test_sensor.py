@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock
 
-import pytest
-from homeassistant.components.sensor import SensorStateClass
-from homeassistant.const import UnitOfEnergy, STATE_UNKNOWN
+from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 
 from custom_components.mytnb.const import (
@@ -25,13 +23,7 @@ from custom_components.mytnb.sensor import (
     SENSOR_DESCRIPTIONS,
     async_setup_entry,
 )
-from tests.conftest import (
-    create_mock_account_data,
-    create_mock_client,
-    MockBillEntry,
-    MockCustomerAccount,
-    MockDueAmount,
-)
+from tests.conftest import create_mock_account_data
 
 
 def make_coordinator_mock(account_data=None):
@@ -51,6 +43,11 @@ def make_entry_mock(coordinator):
     entry = MagicMock()
     entry.runtime_data = coordinator
     return entry
+
+
+def _add_entities(entities, target):
+    """Add entities to the target list."""
+    target.extend(entities)
 
 
 async def test_sensor_native_value(hass: HomeAssistant) -> None:
@@ -93,9 +90,13 @@ async def test_sensor_native_value_when_none(hass: HomeAssistant) -> None:
     assert sensor.native_value is None
 
 
-async def test_sensor_native_value_missing_account(hass: HomeAssistant) -> None:
+async def test_sensor_native_value_missing_account(
+    hass: HomeAssistant,
+) -> None:
     """Test sensor returns None when account not in data."""
-    coordinator = make_coordinator_mock(create_mock_account_data("111111111111"))
+    coordinator = make_coordinator_mock(
+        create_mock_account_data("111111111111")
+    )
 
     sensor = MyTNBSensor(
         coordinator,
@@ -190,14 +191,13 @@ async def test_setup_entry_creates_sensors(hass: HomeAssistant) -> None:
     entry = make_entry_mock(coordinator)
 
     added_entities = []
-    mock_add = lambda entities: added_entities.extend(entities)
 
-    await async_setup_entry(hass, entry, mock_add)
+    await async_setup_entry(
+        hass, entry, lambda e: _add_entities(e, added_entities)
+    )
 
     assert len(added_entities) == 9
-    assert all(
-        isinstance(e, MyTNBSensor) for e in added_entities
-    )
+    assert all(isinstance(e, MyTNBSensor) for e in added_entities)
 
 
 async def test_setup_entry_no_data(hass: HomeAssistant) -> None:
@@ -207,9 +207,10 @@ async def test_setup_entry_no_data(hass: HomeAssistant) -> None:
     entry = make_entry_mock(coordinator)
 
     added_entities = []
-    mock_add = lambda entities: added_entities.extend(entities)
 
-    await async_setup_entry(hass, entry, mock_add)
+    await async_setup_entry(
+        hass, entry, lambda e: _add_entities(e, added_entities)
+    )
 
     assert len(added_entities) == 0
 

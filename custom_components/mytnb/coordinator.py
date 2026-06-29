@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
 
-from mytnb import MyTNBClient
-from mytnb.exceptions import AuthenticationError, APIError, MyTNBError
-
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from mytnb import MyTNBClient
+from mytnb.exceptions import APIError, AuthenticationError, MyTNBError
 
 from .const import DEFAULT_POLL_INTERVAL, DOMAIN
 
@@ -48,13 +45,13 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise UpdateFailed("Timeout fetching accounts") from None
         except (APIError, MyTNBError) as err:
             raise UpdateFailed(f"API error: {err}") from err
 
         data: dict[str, dict] = {}
-        for acc, result in zip(accounts, results):
+        for acc, result in zip(accounts, results, strict=True):
             if isinstance(result, Exception):
                 _LOGGER.warning(
                     "Failed fetching data for account %s: %s",
