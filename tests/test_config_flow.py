@@ -53,8 +53,8 @@ async def test_duplicate_entry(
     mock_mytnb_client,
 ) -> None:
     """Test duplicate config entry is aborted."""
+    # Create the first entry
     flow_id = await _start_flow(hass)
-
     await hass.config_entries.flow.async_configure(
         flow_id,
         {
@@ -63,8 +63,14 @@ async def test_duplicate_entry(
         },
     )
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
+    # Start a second flow and submit the same email — should abort
+    flow_id2 = await _start_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        flow_id2,
+        {
+            CONF_EMAIL: "test@example.com",
+            CONF_PASSWORD: "testpassword",
+        },
     )
 
     assert result["type"] == FlowResultType.ABORT

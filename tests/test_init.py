@@ -19,7 +19,6 @@ _BASE_ENTRY = {
     "version": 1,
     "minor_version": 1,
     "domain": DOMAIN,
-    "data": {},
     "options": {},
     "source": "user",
     "discovery_keys": {},
@@ -132,11 +131,13 @@ async def test_migrate_entry_v1(hass: HomeAssistant) -> None:
 
 async def test_migrate_entry_unknown(hass: HomeAssistant) -> None:
     """Test migration from unknown version returns False."""
-    entry = ConfigEntry(
-        **_BASE_ENTRY,
+    entry_kwargs = dict(_BASE_ENTRY)
+    entry_kwargs.update(
         version=99,
+        data={},
         title="myTNB",
         entry_id="test",
     )
+    entry = ConfigEntry(**entry_kwargs)
     result = await async_migrate_entry(hass, entry)
     assert result is False
