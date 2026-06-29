@@ -140,13 +140,13 @@ async def test_coordinator_partial_failure(
     assert "bad" not in data
 
 
-async def test_coordinator_timeout_raises_update_failed(
+async def test_coordinator_generic_error_raises_update_failed(
     hass: HomeAssistant,
 ) -> None:
-    """Test timeout raises UpdateFailed."""
+    """Test generic error raises UpdateFailed."""
     mock_client = create_mock_client()
     mock_client.get_customer_accounts = AsyncMock(
-        side_effect=TimeoutError
+        side_effect=RuntimeError("unexpected")
     )
 
     coordinator = MyTNBDataUpdateCoordinator(

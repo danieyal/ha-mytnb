@@ -96,7 +96,10 @@ async def test_geo_blocked_error(
     """Test geo-blocked error during config flow."""
     from mytnb.exceptions import GeoBlockedError
 
-    with patch("mytnb.MyTNBClient.login", side_effect=GeoBlockedError("geo blocked")):
+    with patch(
+        "mytnb.MyTNBClient.login",
+        side_effect=GeoBlockedError(),
+    ):
         flow = MyTNBConfigFlow()
         flow.hass = hass
 

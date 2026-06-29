@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -10,8 +9,13 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
-from mytnb import MyTNBClient
-from mytnb.exceptions import APIError, AuthenticationError, GeoBlockedError, MyTNBError
+import mytnb
+from mytnb.exceptions import (
+    APIError,
+    AuthenticationError,
+    GeoBlockedError,
+    MyTNBError,
+)
 
 from .const import DOMAIN
 
@@ -27,7 +31,7 @@ DATA_SCHEMA = vol.Schema(
 
 async def _validate_login(email: str, password: str) -> None:
     """Validate login credentials and account discovery."""
-    client = await MyTNBClient.login(email, password)
+    client = await mytnb.MyTNBClient.login(email, password)
     await client.get_customer_accounts()
 
 
@@ -47,9 +51,7 @@ class MyTNBConfigFlow(ConfigFlow, domain=DOMAIN):
             password = user_input[CONF_PASSWORD]
 
             try:
-                await asyncio.wait_for(
-                    _validate_login(email, password), timeout=30
-                )
+                await _validate_login(email, password)
             except AuthenticationError:
                 errors["base"] = "auth"
             except GeoBlockedError:
@@ -58,8 +60,6 @@ class MyTNBConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "api_error"
             except MyTNBError:
                 errors["base"] = "unknown"
-            except TimeoutError:
-                errors["base"] = "api_error"
             else:
                 await self.async_set_unique_id(email)
                 self._abort_if_unique_id_configured()

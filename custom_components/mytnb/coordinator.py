@@ -8,7 +8,7 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from mytnb import MyTNBClient
+import mytnb
 from mytnb.exceptions import APIError, AuthenticationError, MyTNBError
 
 from .const import DEFAULT_POLL_INTERVAL, DOMAIN
@@ -29,16 +29,14 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self._email = email
         self._password = password
-        self._client: MyTNBClient | None = None
+        self._client: mytnb.MyTNBClient | None = None
 
     async def _async_update_data(self) -> dict[str, dict]:
         """Fetch latest data for all accounts."""
         client = await self._get_client()
 
         try:
-            accounts = await asyncio.wait_for(
-                client.get_customer_accounts(), timeout=60
-            )
+            accounts = await client.get_customer_accounts()
             _LOGGER.debug("Discovered %d accounts", len(accounts))
 
             tasks = [
@@ -47,8 +45,6 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        except TimeoutError:
-            raise UpdateFailed("Timeout fetching accounts") from None
         except (APIError, MyTNBError) as err:
             raise UpdateFailed(f"API error: {err}") from err
 
@@ -70,10 +66,12 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
 
         return data
 
-    async def _get_client(self) -> MyTNBClient:
+    async def _get_client(self) -> mytnb.MyTNBClient:
         """Return an authenticated client, re-logging in if needed."""
         if self._client is None:
-            self._client = await MyTNBClient.login(self._email, self._password)
+            self._client = await mytnb.MyTNBClient.login(
+                self._email, self._password
+            )
             _LOGGER.debug("Logged in as %s", self._email)
             return self._client
 
@@ -81,13 +79,15 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
             await self._client.get_customer_accounts()
         except (AuthenticationError, APIError):
             _LOGGER.debug("Session expired, re-logging in")
-            self._client = await MyTNBClient.login(self._email, self._password)
+            self._client = await mytnb.MyTNBClient.login(
+                self._email, self._password
+            )
 
         return self._client
 
     @staticmethod
     async def _fetch_account_data(
-        client: MyTNBClient, account_number: str
+        client: mytnb.MyTNBClient, account_number: str
     ) -> dict:
         """Fetch usage, bill history, and due amount for a single account."""
         usage, bill_history, due = await asyncio.gather(

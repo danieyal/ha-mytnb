@@ -34,13 +34,20 @@ async def test_setup_entry(hass: HomeAssistant, mock_mytnb_client) -> None:
         unique_id=None,
     )
 
-    with patch(
-        "custom_components.mytnb.MyTNBDataUpdateCoordinator",
-        return_value=MagicMock(
-            async_config_entry_first_refresh=AsyncMock(),
-            async_add_listener=MagicMock(),
-            data={"220123456789": {}},
-            _client=None,
+    with (
+        patch(
+            "custom_components.mytnb.MyTNBDataUpdateCoordinator",
+            return_value=MagicMock(
+                async_config_entry_first_refresh=AsyncMock(),
+                async_add_listener=MagicMock(),
+                data={"220123456789": {}},
+                _client=None,
+            ),
+        ),
+        patch.object(
+            hass.config_entries,
+            "async_forward_entry_setups",
+            AsyncMock(),
         ),
     ):
         result = await async_setup_entry(hass, entry)
