@@ -1,0 +1,33 @@
+{
+  "entity": {
+    "sensor": {
+      "current_usage": {
+        "name": "Current usage"
+      },
+      "average_usage": {
+        "name": "Average usage"
+      },
+      "current_cost": {
+        "name": "Current cost"
+      },
+      "projected_cost": {
+        "name": "Projected cost"
+      },
+      "monthly_usage": {
+        "name": "Monthly usage"
+      },
+      "monthly_cost": {
+        "name": "Monthly cost"
+      },
+      "due_amount": {
+        "name": "Due amount"
+      },
+      "last_payment_amount": {
+        "name": "Last payment amount"
+      },
+      "last_payment_date": {
+        "name": "Last payment date"
+      }
+    }
+  }
+}
