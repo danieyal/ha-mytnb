@@ -5,6 +5,9 @@ PLATFORMS = ["sensor"]
 
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
+CONF_ACCOUNTS = "accounts"
+CONF_ACCOUNT_NUMBER = "account_number"
+CONF_OWNER_NAME = "owner_name"
 
 DEFAULT_POLL_INTERVAL = timedelta(hours=1)
 

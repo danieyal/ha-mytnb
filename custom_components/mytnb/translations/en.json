@@ -1,4 +1,47 @@
 {
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        },
+        "description": "Enter your myTNB login credentials to discover linked accounts.",
+        "title": "myTNB"
+      },
+      "accounts": {
+        "data": {
+          "accounts": "Accounts"
+        },
+        "description": "Select the accounts you want to monitor in Home Assistant.",
+        "title": "Select Accounts"
+      }
+    },
+    "error": {
+      "auth": "Authentication failed. Check your email and password.",
+      "geo_blocked": "Access blocked. myTNB only accepts connections from Malaysian IP addresses.",
+      "api_error": "API error occurred. Please try again later.",
+      "unknown": "An unexpected error occurred.",
+      "no_accounts": "No accounts found for this login.",
+      "select_at_least_one": "Please select at least one account."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "accounts": "Accounts"
+        },
+        "description": "Select which accounts to monitor. Changes will take effect immediately.",
+        "title": "Manage Accounts"
+      }
+    },
+    "error": {
+      "api_error": "Failed to connect to myTNB. Please try again later.",
+      "unknown": "An unexpected error occurred.",
+      "select_at_least_one": "Please select at least one account."
+    }
+  },
   "entity": {
     "sensor": {
       "current_usage": {

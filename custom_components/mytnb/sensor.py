@@ -27,6 +27,8 @@ from .const import (
     ATTR_IS_SMART_METER,
     ATTR_OWNER_NAME,
     ATTR_TARIFF_BLOCKS,
+    CONF_ACCOUNT_NUMBER,
+    CONF_ACCOUNTS,
     DOMAIN,
 )
 from .coordinator import MyTNBDataUpdateCoordinator
@@ -159,8 +161,11 @@ async def async_setup_entry(
     if coordinator.data is None:
         return
 
+    accounts: list[dict[str, str]] = entry.data.get(CONF_ACCOUNTS, [])
+
     entities = []
-    for account_number in coordinator.data:
+    for acc in accounts:
+        account_number = acc[CONF_ACCOUNT_NUMBER]
         for desc in SENSOR_DESCRIPTIONS:
             entities.append(
                 MyTNBSensor(coordinator, desc, account_number)

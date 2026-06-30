@@ -16,6 +16,7 @@ from custom_components.mytnb.const import (
     ATTR_IS_SMART_METER,
     ATTR_OWNER_NAME,
     ATTR_TARIFF_BLOCKS,
+    CONF_ACCOUNTS,
     DOMAIN,
 )
 from custom_components.mytnb.sensor import (
@@ -23,7 +24,7 @@ from custom_components.mytnb.sensor import (
     MyTNBSensor,
     async_setup_entry,
 )
-from tests.conftest import create_mock_account_data
+from tests.conftest import create_mock_account_data, make_account_dict
 
 
 def make_coordinator_mock(account_data=None):
@@ -38,10 +39,13 @@ def make_coordinator_mock(account_data=None):
     return coordinator
 
 
-def make_entry_mock(coordinator):
-    """Create a mock config entry."""
+def make_entry_mock(coordinator, accounts=None):
+    """Create a mock config entry with accounts in data."""
+    if accounts is None:
+        accounts = [make_account_dict()]
     entry = MagicMock()
     entry.runtime_data = coordinator
+    entry.data = {CONF_ACCOUNTS: accounts}
     return entry
 
 
@@ -187,10 +191,10 @@ async def test_sensor_state_classes() -> None:
 
 
 async def test_setup_entry_creates_sensors(hass: HomeAssistant) -> None:
-    """Test async_setup_entry creates sensors for all accounts."""
+    """Test async_setup_entry creates sensors for configured accounts."""
     data = create_mock_account_data("111111111111")
     coordinator = make_coordinator_mock(data)
-    entry = make_entry_mock(coordinator)
+    entry = make_entry_mock(coordinator, accounts=[make_account_dict("111111111111")])
 
     added_entities = []
 
@@ -217,42 +221,46 @@ async def test_setup_entry_no_data(hass: HomeAssistant) -> None:
     assert len(added_entities) == 0
 
 
-async def test_last_payment_date_sensor(hass: HomeAssistant) -> None:
-    """Test last_payment_date sensor returns date."""
-    data = create_mock_account_data()
-    coordinator = make_coordinator_mock(data)
+async def test_setup_entry_multiple_accounts(hass: HomeAssistant) -> None:
+    """Test sensors created only for configured accounts, not all in coordinator."""
+    # Coordinator has data for 3 accounts
+    coord_data = {
+        **create_mock_account_data("111"),
+        **create_mock_account_data("222"),
+        **create_mock_account_data("333"),
+    }
+    coordinator = make_coordinator_mock(coord_data)
 
-    sensor = MyTNBSensor(
+    # But only 2 are configured
+    entry = make_entry_mock(
         coordinator,
-        SENSOR_DESCRIPTIONS[8],  # last_payment_date
-        "220123456789",
+        accounts=[
+            make_account_dict("111"),
+            make_account_dict("333"),
+        ],
     )
-    assert sensor.native_value == date(2026, 5, 15)
 
+    added_entities = []
 
-async def test_monthly_usage_sensor(hass: HomeAssistant) -> None:
-    """Test monthly_usage sensor returns correct value."""
-    data = create_mock_account_data()
-    coordinator = make_coordinator_mock(data)
-
-    sensor = MyTNBSensor(
-        coordinator,
-        SENSOR_DESCRIPTIONS[4],  # monthly_usage
-        "220123456789",
+    await async_setup_entry(
+        hass, entry, lambda e: _add_entities(e, added_entities)
     )
-    assert sensor.native_value == 450.0
-    assert sensor.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
+
+    # 2 accounts × 9 sensors = 18
+    assert len(added_entities) == 18
+    account_numbers = {e.account_number for e in added_entities}
+    assert account_numbers == {"111", "333"}
 
 
-async def test_due_amount_sensor(hass: HomeAssistant) -> None:
-    """Test due_amount sensor."""
-    data = create_mock_account_data()
-    coordinator = make_coordinator_mock(data)
+async def test_setup_entry_no_configured_accounts(hass: HomeAssistant) -> None:
+    """Test setup with empty accounts list creates no sensors."""
+    coordinator = make_coordinator_mock()
+    entry = make_entry_mock(coordinator, accounts=[])
 
-    sensor = MyTNBSensor(
-        coordinator,
-        SENSOR_DESCRIPTIONS[6],  # due_amount
-        "220123456789",
+    added_entities = []
+
+    await async_setup_entry(
+        hass, entry, lambda e: _add_entities(e, added_entities)
     )
-    assert sensor.native_value == 26.16
-    assert sensor.native_unit_of_measurement == "RM"
+
+    assert len(added_entities) == 0

@@ -117,6 +117,17 @@ def create_mock_client() -> MagicMock:
     return client
 
 
+def make_account_dict(
+    account_number: str = "220123456789",
+    owner_name: str = "Test Owner",
+) -> dict[str, str]:
+    """Create an account dict for config entry data."""
+    return {
+        "account_number": account_number,
+        "owner_name": owner_name,
+    }
+
+
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable loading custom integrations."""
@@ -135,8 +146,9 @@ def mock_mytnb_client():
 
 @pytest.fixture
 def config_entry_data():
-    """Default config entry data."""
+    """Default v2 config entry data with accounts."""
     return {
         "email": "test@example.com",
         "password": "testpassword",
+        "accounts": [make_account_dict()],
     }
