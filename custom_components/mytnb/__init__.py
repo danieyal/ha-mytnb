@@ -51,7 +51,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: MyTNBConfigEntry) -> bo
         coordinator = entry.runtime_data
         hass.data[DOMAIN].pop(entry.entry_id)
         if coordinator and coordinator._client:
-            await coordinator._client.aclose()
+            client = coordinator._client
+            closer = getattr(client, "aclose", None) or getattr(
+                client, "close", None
+            )
+            if closer:
+                await closer()
 
     return unload_ok
 

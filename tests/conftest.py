@@ -50,30 +50,28 @@ class MockDaily:
     )
 
 
+
 @dataclass
-class MockMetrics:
+class MockAccountUsage:
     current_usage: float = 120.0
     average_usage: float = 14.5
     current_cost: float = 26.16
     projected_cost: float = 115.00
-
-
-@dataclass
-class MockAccountUsage:
-    metrics: MockMetrics = field(default_factory=MockMetrics)
     by_month: MockByMonth = field(default_factory=MockByMonth)
     daily: MockDaily = field(default_factory=MockDaily)
 
 
-@dataclass
-class MockBillEntry:
-    date: date = date(2026, 5, 15)
-    amount: float = 87.50
+def _make_bill_entry(
+    bill_date: date = date(2026, 5, 15),
+    amount: float = 87.50,
+) -> dict[str, Any]:
+    """Create a dict-style bill entry matching the new API."""
+    return {"date": bill_date, "amount": amount}
 
 
-@dataclass
-class MockDueAmount:
-    amount_due: float = 26.16
+def _make_due_amount(amount_due: float = 26.16) -> dict[str, float]:
+    """Create a dict-style due amount matching the new API."""
+    return {"amount_due": amount_due}
 
 
 @dataclass
@@ -92,8 +90,8 @@ def create_mock_account_data(
         account_number: {
             "account": MockCustomerAccount(account_number=account_number),
             "usage": MockAccountUsage(),
-            "bill_history": [MockBillEntry()],
-            "due": MockDueAmount(),
+            "bill_history": [_make_bill_entry()],
+            "due": _make_due_amount(),
         }
     }
 
@@ -108,12 +106,13 @@ def create_mock_client() -> MagicMock:
         return_value=MockAccountUsage(),
     )
     client.get_bill_history = AsyncMock(
-        return_value=[MockBillEntry()],
+        return_value=[_make_bill_entry()],
     )
     client.get_account_due_amount = AsyncMock(
-        return_value=MockDueAmount(),
+        return_value=_make_due_amount(),
     )
     client.aclose = AsyncMock()
+    client.close = AsyncMock()
     return client
 
 
