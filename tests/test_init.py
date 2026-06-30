@@ -13,7 +13,12 @@ from custom_components.mytnb import (
     async_setup_entry,
     async_unload_entry,
 )
-from custom_components.mytnb.const import CONF_ACCOUNT_NUMBER, CONF_ACCOUNTS, CONF_OWNER_NAME, DOMAIN
+from custom_components.mytnb.const import (
+    CONF_ACCOUNT_NUMBER,
+    CONF_ACCOUNTS,
+    CONF_OWNER_NAME,
+    DOMAIN,
+)
 from tests.conftest import make_account_dict
 
 _BASE_ENTRY = {

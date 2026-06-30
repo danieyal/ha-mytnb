@@ -24,7 +24,12 @@ def _patch_frame_report():
         yield
 
 
-def _make_coordinator(hass, email="test@example.com", password="testpassword", accounts=None):
+def _make_coordinator(
+    hass,
+    email="test@example.com",
+    password="testpassword",
+    accounts=None,
+):
     """Create a coordinator with default accounts."""
     if accounts is None:
         accounts = [make_account_dict()]

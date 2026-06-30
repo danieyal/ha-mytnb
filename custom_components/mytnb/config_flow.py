@@ -7,6 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import (
+    ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
@@ -21,8 +22,6 @@ from mytnb.exceptions import (
     GeoBlockedError,
     MyTNBError,
 )
-
-from homeassistant.config_entries import ConfigEntry
 
 from .const import CONF_ACCOUNT_NUMBER, CONF_ACCOUNTS, CONF_OWNER_NAME, DOMAIN
 

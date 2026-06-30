@@ -9,7 +9,13 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
 from .config_flow import _validate_login
-from .const import CONF_ACCOUNT_NUMBER, CONF_ACCOUNTS, CONF_OWNER_NAME, DOMAIN, PLATFORMS
+from .const import (
+    CONF_ACCOUNT_NUMBER,
+    CONF_ACCOUNTS,
+    CONF_OWNER_NAME,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import MyTNBDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)

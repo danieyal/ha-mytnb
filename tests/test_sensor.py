@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date
 from unittest.mock import MagicMock
 
-from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 
 from custom_components.mytnb.const import (

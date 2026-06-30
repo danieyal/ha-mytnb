@@ -9,12 +9,13 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.mytnb.config_flow import _validate_login
-from custom_components.mytnb.const import CONF_ACCOUNT_NUMBER, CONF_ACCOUNTS, CONF_OWNER_NAME, DOMAIN
-from tests.conftest import (
-    MockCustomerAccount,
-    make_account_dict,
+from custom_components.mytnb.const import (
+    CONF_ACCOUNT_NUMBER,
+    CONF_ACCOUNTS,
+    CONF_OWNER_NAME,
+    DOMAIN,
 )
+from tests.conftest import MockCustomerAccount
 
 
 async def _start_flow(hass: HomeAssistant):
