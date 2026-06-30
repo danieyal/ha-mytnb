@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -13,7 +13,27 @@ from tests.conftest import (
     MockAccountUsage,
     MockCustomerAccount,
     create_mock_client,
+    make_account_dict,
 )
+
+
+@pytest.fixture(autouse=True)
+def _patch_frame_report():
+    """Suppress ContextVar checks for tests that don't use real config entries."""
+    with patch("homeassistant.helpers.frame.report_usage"):
+        yield
+
+
+def _make_coordinator(
+    hass,
+    email="test@example.com",
+    password="testpassword",
+    accounts=None,
+):
+    """Create a coordinator with default accounts."""
+    if accounts is None:
+        accounts = [make_account_dict()]
+    return MyTNBDataUpdateCoordinator(hass, email, password, accounts)
 
 
 async def test_coordinator_first_refresh(
@@ -21,9 +41,7 @@ async def test_coordinator_first_refresh(
     mock_mytnb_client,
 ) -> None:
     """Test coordinator fetches data on first refresh."""
-    coordinator = MyTNBDataUpdateCoordinator(
-        hass, "test@example.com", "testpassword"
-    )
+    coordinator = _make_coordinator(hass)
     coordinator._client = mock_mytnb_client
 
     data = await coordinator._async_update_data()
@@ -38,18 +56,21 @@ async def test_coordinator_first_refresh(
 async def test_coordinator_multiple_accounts(
     hass: HomeAssistant,
 ) -> None:
-    """Test coordinator handles multiple accounts."""
+    """Test coordinator handles multiple configured accounts."""
     accounts = [
-        MockCustomerAccount(account_number="111111111111"),
-        MockCustomerAccount(account_number="222222222222"),
+        make_account_dict("111111111111"),
+        make_account_dict("222222222222"),
     ]
 
     mock_client = create_mock_client()
-    mock_client.get_customer_accounts = AsyncMock(return_value=accounts)
-
-    coordinator = MyTNBDataUpdateCoordinator(
-        hass, "test@example.com", "testpassword"
+    mock_client.get_customer_accounts = AsyncMock(
+        return_value=[
+            MockCustomerAccount(account_number="111111111111"),
+            MockCustomerAccount(account_number="222222222222"),
+        ]
     )
+
+    coordinator = _make_coordinator(hass, accounts=accounts)
     coordinator._client = mock_client
 
     data = await coordinator._async_update_data()
@@ -64,9 +85,7 @@ async def test_coordinator_login_on_first_use(
     """Test coordinator performs login when _client is None."""
     mock_client = create_mock_client()
 
-    coordinator = MyTNBDataUpdateCoordinator(
-        hass, "test@example.com", "testpassword"
-    )
+    coordinator = _make_coordinator(hass)
     coordinator._client = None
 
     import mytnb
@@ -93,9 +112,7 @@ async def test_coordinator_relogin_on_auth_error(
     )
     mock_client2 = create_mock_client()
 
-    coordinator = MyTNBDataUpdateCoordinator(
-        hass, "test@example.com", "testpassword"
-    )
+    coordinator = _make_coordinator(hass)
     coordinator._client = mock_client1
 
     import mytnb
@@ -115,12 +132,17 @@ async def test_coordinator_partial_failure(
 ) -> None:
     """Test coordinator continues when one account fetch fails."""
     accounts = [
-        MockCustomerAccount(account_number="good"),
-        MockCustomerAccount(account_number="bad"),
+        make_account_dict("good"),
+        make_account_dict("bad"),
     ]
 
     mock_client = create_mock_client()
-    mock_client.get_customer_accounts = AsyncMock(return_value=accounts)
+    mock_client.get_customer_accounts = AsyncMock(
+        return_value=[
+            MockCustomerAccount(account_number="good"),
+            MockCustomerAccount(account_number="bad"),
+        ]
+    )
 
     async def fail_for_bad(acc_no):
         if acc_no == "bad":
@@ -129,9 +151,7 @@ async def test_coordinator_partial_failure(
 
     mock_client.get_account_usage_smart = fail_for_bad
 
-    coordinator = MyTNBDataUpdateCoordinator(
-        hass, "test@example.com", "testpassword"
-    )
+    coordinator = _make_coordinator(hass, accounts=accounts)
     coordinator._client = mock_client
 
     data = await coordinator._async_update_data()
@@ -149,9 +169,7 @@ async def test_coordinator_generic_error_raises_update_failed(
         side_effect=RuntimeError("unexpected")
     )
 
-    coordinator = MyTNBDataUpdateCoordinator(
-        hass, "test@example.com", "testpassword"
-    )
+    coordinator = _make_coordinator(hass)
     coordinator._get_client = AsyncMock(return_value=mock_client)
 
     with pytest.raises(UpdateFailed):
@@ -169,10 +187,32 @@ async def test_coordinator_api_error_raises_update_failed(
         side_effect=APIError("api failed")
     )
 
-    coordinator = MyTNBDataUpdateCoordinator(
-        hass, "test@example.com", "testpassword"
-    )
+    coordinator = _make_coordinator(hass)
     coordinator._get_client = AsyncMock(return_value=mock_client)
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+async def test_coordinator_no_accounts(
+    hass: HomeAssistant,
+) -> None:
+    """Test coordinator with no configured accounts returns empty dict."""
+    coordinator = _make_coordinator(hass, accounts=[])
+
+    data = await coordinator._async_update_data()
+
+    assert data == {}
+
+
+async def test_coordinator_account_numbers_property(
+    hass: HomeAssistant,
+) -> None:
+    """Test the account_numbers property."""
+    accounts = [
+        make_account_dict("111"),
+        make_account_dict("222"),
+    ]
+    coordinator = _make_coordinator(hass, accounts=accounts)
+
+    assert coordinator.account_numbers == ["111", "222"]

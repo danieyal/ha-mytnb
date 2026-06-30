@@ -8,7 +8,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, PLATFORMS
+from .config_flow import _validate_login
+from .const import (
+    CONF_ACCOUNT_NUMBER,
+    CONF_ACCOUNTS,
+    CONF_OWNER_NAME,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import MyTNBDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,8 +27,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: MyTNBConfigEntry) -> boo
     """Set up myTNB from a config entry."""
     email = entry.data[CONF_EMAIL]
     password = entry.data[CONF_PASSWORD]
+    accounts: list[dict[str, str]] = entry.data.get(CONF_ACCOUNTS, [])
 
-    coordinator = MyTNBDataUpdateCoordinator(hass, email, password)
+    coordinator = MyTNBDataUpdateCoordinator(hass, email, password, accounts)
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
@@ -56,7 +64,40 @@ async def async_update_listener(hass: HomeAssistant, entry: MyTNBConfigEntry) ->
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate old config entry."""
     if entry.version == 1:
+        # v1 → v2: auto-discover all accounts and store them in data
+        email = entry.data[CONF_EMAIL]
+        password = entry.data[CONF_PASSWORD]
+
+        try:
+            discovered = await _validate_login(email, password)
+        except Exception as exc:
+            _LOGGER.error("Migration failed for %s: %s", email, exc)
+            return False
+
+        accounts = [
+            {
+                CONF_ACCOUNT_NUMBER: acc[CONF_ACCOUNT_NUMBER],
+                CONF_OWNER_NAME: acc[CONF_OWNER_NAME],
+            }
+            for acc in discovered
+        ]
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                CONF_EMAIL: email,
+                CONF_PASSWORD: password,
+                CONF_ACCOUNTS: accounts,
+            },
+            version=2,
+        )
+        _LOGGER.info(
+            "Migrated entry for %s to v2 with %d accounts",
+            email,
+            len(accounts),
+        )
         return True
+
     _LOGGER.warning(
         "Migration from config entry version %s is not supported", entry.version
     )

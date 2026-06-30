@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -11,16 +12,29 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 import mytnb
 from mytnb.exceptions import APIError, AuthenticationError, MyTNBError
 
-from .const import DEFAULT_POLL_INTERVAL, DOMAIN
+from .const import CONF_ACCOUNT_NUMBER, DEFAULT_POLL_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
-    """Coordinator to fetch myTNB data for all linked accounts."""
+    """Coordinator to fetch myTNB data for configured accounts."""
 
-    def __init__(self, hass: HomeAssistant, email: str, password: str) -> None:
-        """Initialize the coordinator."""
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        email: str,
+        password: str,
+        accounts: list[dict[str, str]],
+    ) -> None:
+        """Initialize the coordinator.
+
+        Args:
+            hass: HomeAssistant instance.
+            email: myTNB login email.
+            password: myTNB login password.
+            accounts: List of account dicts with account_number and owner_name.
+        """
         super().__init__(
             hass,
             _LOGGER,
@@ -29,19 +43,36 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self._email = email
         self._password = password
+        self._accounts = accounts
         self._client: mytnb.MyTNBClient | None = None
 
-    async def _async_update_data(self) -> dict[str, dict]:
-        """Fetch latest data for all accounts."""
+    @property
+    def account_numbers(self) -> list[str]:
+        """Return the list of configured account numbers."""
+        return [acc[CONF_ACCOUNT_NUMBER] for acc in self._accounts]
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch latest data for configured accounts."""
+        if not self._accounts:
+            _LOGGER.warning("No accounts configured, skipping data fetch")
+            return {}
+
         client = await self._get_client()
+        account_numbers = self.account_numbers
 
         try:
-            accounts = await client.get_customer_accounts()
-            _LOGGER.debug("Discovered %d accounts", len(accounts))
+            # Fetch account metadata once for all configured accounts
+            all_accounts = await client.get_customer_accounts()
+            account_lookup = {acc.account_number: acc for acc in all_accounts}
+            _LOGGER.debug(
+                "Discovered %d accounts, fetching data for %d configured",
+                len(all_accounts),
+                len(account_numbers),
+            )
 
             tasks = [
-                self._fetch_account_data(client, acc.account_number)
-                for acc in accounts
+                self._fetch_account_data(client, acc_no, account_lookup)
+                for acc_no in account_numbers
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -51,16 +82,16 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Unexpected error: {err}") from err
 
         data: dict[str, dict] = {}
-        for acc, result in zip(accounts, results, strict=True):
+        for acc_no, result in zip(account_numbers, results, strict=True):
             if isinstance(result, Exception):
                 _LOGGER.warning(
                     "Failed fetching data for account %s: %s",
-                    acc.account_number,
+                    acc_no,
                     result,
                 )
                 continue
-            data[acc.account_number] = {
-                "account": acc,
+            data[acc_no] = {
+                "account": result["account"],
                 "usage": result["usage"],
                 "bill_history": result["bill_history"],
                 "due": result["due"],
@@ -78,6 +109,7 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
             return self._client
 
         try:
+            # Light session check: re-discover accounts to verify session
             await self._client.get_customer_accounts()
         except (AuthenticationError, APIError):
             _LOGGER.debug("Session expired, re-logging in")
@@ -87,11 +119,13 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
 
         return self._client
 
-    @staticmethod
     async def _fetch_account_data(
-        client: mytnb.MyTNBClient, account_number: str
+        self,
+        client: mytnb.MyTNBClient,
+        account_number: str,
+        account_lookup: dict[str, Any],
     ) -> dict:
-        """Fetch usage, bill history, and due amount for a single account."""
+        """Fetch usage, bill history, due amount, and account metadata."""
         usage, bill_history, due = await asyncio.gather(
             client.get_account_usage_smart(account_number),
             client.get_bill_history(account_number),
@@ -101,4 +135,5 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
             "usage": usage,
             "bill_history": bill_history,
             "due": due,
+            "account": account_lookup.get(account_number),
         }
