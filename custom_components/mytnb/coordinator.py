@@ -178,6 +178,7 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 "Failed importing statistics for account %s: %s",
                 account_number,
                 err,
+                exc_info=err,
             )
 
     async def _fetch_account_data(
