@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from unittest.mock import MagicMock
 
 from homeassistant.core import HomeAssistant
@@ -11,6 +12,7 @@ from custom_components.mytnb.const import (
     ATTR_ADDRESS,
     ATTR_BILL_HISTORY,
     ATTR_DAILY_USAGE,
+    ATTR_DUE_DATE,
     ATTR_IS_SMART_METER,
     ATTR_OWNER_NAME,
     ATTR_TARIFF_BLOCKS,
@@ -77,6 +79,46 @@ async def test_sensor_native_value(hass: HomeAssistant) -> None:
         "220123456789",
     )
     assert due_sensor.native_value == 26.16
+
+
+async def test_last_payment_date_returns_date_object(hass: HomeAssistant) -> None:
+    """The DATE-device-class sensor must surface a date, not a raw string.
+
+    The library parses myTNB's DD/MM/YYYY into a date; HA calls .isoformat() on
+    the value, so a string state would raise "Invalid date". Guards the regression.
+    """
+    from datetime import date
+
+    from mytnb.models import BillHistoryEntry
+
+    data = create_mock_account_data()
+    data["220123456789"]["bill_history"] = [
+        BillHistoryEntry.model_validate({"DtBill": "31/05/2026", "AmPayable": "87.50"})
+    ]
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(
+        coordinator,
+        SENSOR_DESCRIPTIONS[8],  # last_payment_date
+        "220123456789",
+    )
+    assert sensor.native_value == date(2026, 5, 31)
+
+
+async def test_last_payment_date_unparseable_returns_none(
+    hass: HomeAssistant,
+) -> None:
+    """An unparseable date degrades to None instead of raising."""
+    from mytnb.models import BillHistoryEntry
+
+    data = create_mock_account_data()
+    data["220123456789"]["bill_history"] = [
+        BillHistoryEntry.model_validate({"DtBill": "not-a-date", "AmPayable": "1.0"})
+    ]
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[8], "220123456789")
+    assert sensor.native_value is None
 
 
 async def test_sensor_native_value_when_none(hass: HomeAssistant) -> None:
@@ -162,11 +204,19 @@ async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:
     assert len(monthly_attrs[ATTR_TARIFF_BLOCKS]) == 1
     assert monthly_attrs[ATTR_TARIFF_BLOCKS][0]["rate"] == "0.218"
 
-    # Bill history lives on the last_payment_amount sensor.
+    # Bill history lives on the last_payment_amount sensor; dates stay typed.
     payment_sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[7], "220123456789")
     payment_attrs = payment_sensor.extra_state_attributes
     assert len(payment_attrs[ATTR_BILL_HISTORY]) == 1
     assert payment_attrs[ATTR_BILL_HISTORY][0]["amount"] == 87.50
+    assert payment_attrs[ATTR_BILL_HISTORY][0]["date"] == date(2026, 5, 15)
+
+    # Due date lives on the due_amount sensor and is a date, not a raw string.
+    due_sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[6], "220123456789")
+    due_attrs = due_sensor.extra_state_attributes
+    assert due_attrs[ATTR_DUE_DATE] == date(2026, 6, 30)
+    assert isinstance(due_attrs[ATTR_DUE_DATE], date)
+    assert ATTR_BILL_HISTORY not in due_attrs
 
 
 async def test_sensor_extra_attributes_none_when_no_data(

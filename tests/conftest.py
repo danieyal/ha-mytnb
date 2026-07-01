@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from mytnb.models import AccountDueAmount, BillHistoryEntry
 
 # ── Mock models matching python-mytnb Pydantic shapes ────────────────
 
@@ -85,33 +86,44 @@ class MockAccountUsage:
     )
 
 
-# ── Raw API shapes (what the python-mytnb client returns) ────────────
+# ── Raw API wire payloads (parsed by python-mytnb into typed models) ─
+# These are the raw dicts the myTNB API returns; the client parses them into
+# the typed models below. They exist only to build those models here.
 
 
-def _raw_due_amount(amount_due: str = "26.16", due_date: str = "2026-06-30") -> dict:
-    """Raw API shape for get_account_due_amount()."""
+def _raw_due_amount(amount_due: str = "26.16", due_date: str = "30/06/2026") -> dict:
+    """Raw API wire payload for GetAccountDueAmount."""
     return {"AccountAmountDue": {"amountDue": amount_due, "billDueDate": due_date}}
 
 
 def _raw_bill_history(
     amount: str = "87.50",
-    date_str: str = "2026-05-15",
+    date_str: str = "15/05/2026",
 ) -> list[dict]:
-    """Raw API shape for get_bill_history()."""
+    """Raw API wire payload for GetBillHistory (DD/MM/YYYY like the real API)."""
     return [{"DtBill": date_str, "AmPayable": amount, "BillingNo": "12345"}]
 
 
-# ── Normalized shapes (what the coordinator stores) ──────────────────
+# ── Typed models (python-mytnb >=0.5.0 client return values) ─────────
 
 
-def _norm_due(amount_due: float = 26.16, due_date: str = "2026-06-30") -> dict:
-    """Normalized due amount after coordinator normalization."""
-    return {"amount_due": amount_due, "due_date": due_date}
+def _due_amount(
+    amount_due: str = "26.16",
+    due_date: str = "30/06/2026",
+) -> AccountDueAmount:
+    """AccountDueAmount, as get_account_due_amount() now returns."""
+    return AccountDueAmount.from_api_response(_raw_due_amount(amount_due, due_date))
 
 
-def _norm_bill_entry(amount: float = 87.50, date_str: str = "2026-05-15") -> dict:
-    """Normalized bill history entry after coordinator normalization."""
-    return {"date": date_str, "amount": amount}
+def _bill_history(
+    amount: str = "87.50",
+    date_str: str = "15/05/2026",
+) -> list[BillHistoryEntry]:
+    """list[BillHistoryEntry], as get_bill_history() now returns."""
+    return [
+        BillHistoryEntry.model_validate(entry)
+        for entry in _raw_bill_history(amount, date_str)
+    ]
 
 
 # ── Mock CustomerAccount ─────────────────────────────────────────────
@@ -134,19 +146,26 @@ class MockCustomerAccount:
 def create_mock_account_data(
     account_number: str = "220123456789",
 ) -> dict[str, Any]:
-    """Create a mock coordinator data entry (normalized shape)."""
+    """Create a mock coordinator data entry.
+
+    Mirrors what the coordinator stores: typed models straight from the client
+    (``AccountDueAmount`` / ``list[BillHistoryEntry]``), no dict normalization.
+    """
     return {
         account_number: {
             "account": MockCustomerAccount(account_number=account_number),
             "usage": MockAccountUsage(),
-            "bill_history": [_norm_bill_entry()],
-            "due": _norm_due(),
+            "bill_history": _bill_history(),
+            "due": _due_amount(),
         }
     }
 
 
 def create_mock_client() -> MagicMock:
-    """Create a fully mocked MyTNBClient returning *raw* API shapes."""
+    """Create a fully mocked MyTNBClient (python-mytnb >=0.5.0 return types).
+
+    get_bill_history/get_account_due_amount return typed models, not raw dicts.
+    """
     client = MagicMock()
     client.get_customer_accounts = AsyncMock(
         return_value=[MockCustomerAccount()],
@@ -155,10 +174,10 @@ def create_mock_client() -> MagicMock:
         return_value=MockAccountUsage(),
     )
     client.get_bill_history = AsyncMock(
-        return_value=_raw_bill_history(),
+        return_value=_bill_history(),
     )
     client.get_account_due_amount = AsyncMock(
-        return_value=_raw_due_amount(),
+        return_value=_due_amount(),
     )
     client.close = AsyncMock()
     return client

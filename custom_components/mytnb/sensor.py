@@ -117,7 +117,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         device_class=SensorDeviceClass.MONETARY,
         native_unit_of_measurement=CURRENCY_RM,
         state_class=SensorStateClass.TOTAL,
-        value_fn=lambda data: data["due"]["amount_due"],
+        value_fn=lambda data: data["due"].amount_due,
         attr_keys=(ATTR_DUE_DATE,),
     ),
     MyTNBSensorEntityDescription(
@@ -126,7 +126,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         device_class=SensorDeviceClass.MONETARY,
         native_unit_of_measurement=CURRENCY_RM,
         value_fn=lambda data: (
-            data["bill_history"][0]["amount"] if data["bill_history"] else None
+            data["bill_history"][0].amount if data["bill_history"] else None
         ),
         attr_keys=(ATTR_BILL_HISTORY,),
     ),
@@ -135,7 +135,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         translation_key="last_payment_date",
         device_class=SensorDeviceClass.DATE,
         value_fn=lambda data: (
-            data["bill_history"][0]["date"] if data["bill_history"] else None
+            data["bill_history"][0].date if data["bill_history"] else None
         ),
     ),
 ]
@@ -252,15 +252,15 @@ def _build_attribute(key: str, data: dict[str, Any]) -> Any:
     usage = data.get("usage")
 
     if key == ATTR_DUE_DATE:
-        return data.get("due", {}).get("due_date")
+        due = data.get("due")
+        return due.due_date if due is not None else None
 
     if key == ATTR_BILL_HISTORY:
         bill_history = data.get("bill_history") or []
         if not bill_history:
             return None
         return [
-            {"date": bill.get("date"), "amount": bill.get("amount")}
-            for bill in bill_history
+            {"date": bill.date, "amount": bill.amount} for bill in bill_history
         ]
 
     if key == ATTR_TARIFF_BLOCKS:
