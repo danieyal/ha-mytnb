@@ -1,4 +1,4 @@
-python-mytnb>=0.5.0
+python-mytnb>=0.5.1
 homeassistant>=2024.1.0
 pytest-homeassistant-custom-component>=0.13.0
 pytest-mock>=3.14.0
