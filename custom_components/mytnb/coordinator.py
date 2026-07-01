@@ -14,6 +14,7 @@ import mytnb
 from mytnb.exceptions import APIError, AuthenticationError, MyTNBError
 
 from .const import CONF_ACCOUNT_NUMBER, DEFAULT_POLL_INTERVAL, DOMAIN
+from .statistics import async_import_daily_statistics
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,6 +106,9 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 "bill_history": result["bill_history"],
                 "due": result["due"],
             }
+            await self._backfill_statistics(
+                acc_no, result["account"], result["usage"]
+            )
 
         # If nothing at all succeeded this cycle, treat it as a real failure.
         # On first refresh this becomes ConfigEntryNotReady (HA retries setup);
@@ -150,6 +154,31 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 ) from err
             _LOGGER.debug("Logged in as %s", self._email)
         return self._client
+
+    async def _backfill_statistics(
+        self,
+        account_number: str,
+        account: Any,
+        usage: Any,
+    ) -> None:
+        """Import the daily energy/cost series as long-term statistics.
+
+        Never allowed to fail the coordinator update — the recorder may be
+        unavailable, and stale statistics are not worth losing live data over.
+        """
+        if not (usage and usage.by_day):
+            return
+        owner_name = account.owner_name if account is not None else ""
+        try:
+            await async_import_daily_statistics(
+                self.hass, account_number, owner_name, usage
+            )
+        except Exception as err:  # noqa: BLE001 - stats must never break updates
+            _LOGGER.warning(
+                "Failed importing statistics for account %s: %s",
+                account_number,
+                err,
+            )
 
     async def _fetch_account_data(
         self,
