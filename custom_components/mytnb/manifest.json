@@ -7,5 +7,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/danieyal/ha-mytnb/issues",
   "requirements": ["python-mytnb>=0.3.0"],
-  "version": "1.3.0"
+  "version": "1.3.1"
 }

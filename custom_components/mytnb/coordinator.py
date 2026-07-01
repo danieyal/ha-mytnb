@@ -126,14 +126,52 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         account_lookup: dict[str, Any],
     ) -> dict:
         """Fetch usage, bill history, due amount, and account metadata."""
-        usage, bill_history, due = await asyncio.gather(
+        usage, bill_history_raw, due_raw = await asyncio.gather(
             client.get_account_usage_smart(account_number),
             client.get_bill_history(account_number),
             client.get_account_due_amount(account_number),
         )
         return {
             "usage": usage,
-            "bill_history": bill_history,
-            "due": due,
+            "bill_history": self._normalize_bill_history(bill_history_raw),
+            "due": self._normalize_due(due_raw),
             "account": account_lookup.get(account_number),
         }
+
+    @staticmethod
+    def _normalize_due(raw: dict) -> dict[str, Any]:
+        """Normalize the due-amount payload into a stable schema.
+
+        Raw shape: {"AccountAmountDue": {"amountDue": "12.34", "billDueDate": "..."}}
+        Normalized: {"amount_due": 12.34, "due_date": "..."}
+        """
+        inner = raw.get("AccountAmountDue", raw) if isinstance(raw, dict) else {}
+        if not isinstance(inner, dict):
+            return {"amount_due": None, "due_date": None}
+
+        amount = inner.get("amountDue")
+        return {
+            "amount_due": float(amount) if amount is not None else None,
+            "due_date": inner.get("billDueDate"),
+        }
+
+    @staticmethod
+    def _normalize_bill_history(raw: list) -> list[dict[str, Any]]:
+        """Normalize bill-history entries into a stable schema.
+
+        Raw shape: [{"DtBill": "2026-01-15", "AmPayable": "87.50", ...}]
+        Normalized: [{"date": "2026-01-15", "amount": 87.50}]
+        """
+        if not isinstance(raw, list):
+            return []
+
+        normalized = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            amount = entry.get("AmPayable")
+            normalized.append({
+                "date": entry.get("DtBill"),
+                "amount": float(amount) if amount is not None else None,
+            })
+        return normalized

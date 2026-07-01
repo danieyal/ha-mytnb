@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -38,13 +37,6 @@ _LOGGER = logging.getLogger(__name__)
 CURRENCY_RM = "RM"
 
 
-def _safe_isoformat(value: date | datetime | str) -> str:
-    """Return ISO format string for a date/datetime, or the value as-is."""
-    if isinstance(value, (date, datetime)):
-        return value.isoformat()
-    return value
-
-
 @dataclass(frozen=True, kw_only=True)
 class MyTNBSensorEntityDescription(SensorEntityDescription):
     """Description for a myTNB sensor derived from a single account."""
@@ -58,44 +50,28 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         translation_key="current_usage",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
-        value_fn=lambda data: (
-            data["usage"].metrics.current_usage
-            if data["usage"].metrics
-            else None
-        ),
+        value_fn=lambda data: data["usage"].current_usage_kwh,
     ),
     MyTNBSensorEntityDescription(
         key="average_usage",
         translation_key="average_usage",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: (
-            data["usage"].metrics.average_usage
-            if data["usage"].metrics
-            else None
-        ),
+        value_fn=lambda data: data["usage"].average_usage_kwh,
     ),
     MyTNBSensorEntityDescription(
         key="current_cost",
         translation_key="current_cost",
         native_unit_of_measurement=CURRENCY_RM,
         state_class=SensorStateClass.TOTAL,
-        value_fn=lambda data: (
-            data["usage"].metrics.current_cost
-            if data["usage"].metrics
-            else None
-        ),
+        value_fn=lambda data: data["usage"].current_cost_rm,
     ),
     MyTNBSensorEntityDescription(
         key="projected_cost",
         translation_key="projected_cost",
         native_unit_of_measurement=CURRENCY_RM,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: (
-            data["usage"].metrics.projected_cost
-            if data["usage"].metrics
-            else None
-        ),
+        value_fn=lambda data: data["usage"].projected_cost_rm,
     ),
     MyTNBSensorEntityDescription(
         key="monthly_usage",
@@ -103,7 +79,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda data: (
-            data["usage"].by_month.months[0].usage_total
+            data["usage"].by_month.months[0].usage_kwh
             if data["usage"].by_month and data["usage"].by_month.months
             else None
         ),
@@ -114,7 +90,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         native_unit_of_measurement=CURRENCY_RM,
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: (
-            data["usage"].by_month.months[0].amount_total
+            data["usage"].by_month.months[0].amount_rm
             if data["usage"].by_month and data["usage"].by_month.months
             else None
         ),
@@ -124,7 +100,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         translation_key="due_amount",
         native_unit_of_measurement=CURRENCY_RM,
         state_class=SensorStateClass.TOTAL,
-        value_fn=lambda data: data["due"].amount_due,
+        value_fn=lambda data: data["due"]["amount_due"],
     ),
     MyTNBSensorEntityDescription(
         key="last_payment_amount",
@@ -132,7 +108,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         native_unit_of_measurement=CURRENCY_RM,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: (
-            data["bill_history"][0].amount
+            data["bill_history"][0]["amount"]
             if data["bill_history"]
             else None
         ),
@@ -142,7 +118,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         translation_key="last_payment_date",
         device_class="date",
         value_fn=lambda data: (
-            data["bill_history"][0].date
+            data["bill_history"][0]["date"]
             if data["bill_history"]
             else None
         ),
@@ -220,15 +196,15 @@ class MyTNBSensor(CoordinatorEntity, SensorEntity):
         attrs: dict[str, Any] = {
             ATTR_ACCOUNT_NUMBER: account.account_number,
             ATTR_OWNER_NAME: account.owner_name,
-            ATTR_ADDRESS: account.address,
+            ATTR_ADDRESS: account.account_st_address,
             ATTR_IS_SMART_METER: account.is_smart_meter,
         }
 
         if bill_history:
             attrs[ATTR_BILL_HISTORY] = [
                 {
-                    "date": _safe_isoformat(bill.date),
-                    "amount": bill.amount,
+                    "date": bill.get("date"),
+                    "amount": bill.get("amount"),
                 }
                 for bill in bill_history
             ]
@@ -238,22 +214,24 @@ class MyTNBSensor(CoordinatorEntity, SensorEntity):
             if month.tariff_blocks:
                 attrs[ATTR_TARIFF_BLOCKS] = [
                     {
-                        "block": block.block,
-                        "rate": block.rate,
+                        "block": block.block_id,
+                        "rate": block.block_pricing,
                         "usage": block.usage,
-                        "cost": block.cost,
+                        "cost": block.amount,
                     }
                     for block in month.tariff_blocks
                 ]
 
-        if usage and usage.daily and usage.daily.days:
-            attrs[ATTR_DAILY_USAGE] = [
-                {
-                    "date": _safe_isoformat(day.date),
-                    "usage": day.usage,
-                    "cost": day.cost,
-                }
-                for day in usage.daily.days
-            ]
+        if usage and usage.by_day:
+            days: list[dict] = []
+            for week in usage.by_day:
+                for day in week.days:
+                    days.append({
+                        "date": day.date,
+                        "usage": day.consumption_kwh,
+                        "cost": day.amount_rm,
+                    })
+            if days:
+                attrs[ATTR_DAILY_USAGE] = days
 
         return attrs
