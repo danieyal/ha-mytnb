@@ -69,8 +69,11 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 len(account_numbers),
             )
 
+            # _discover_accounts() guarantees a non-None client above.
+            client = self._client
+            assert client is not None
             tasks = [
-                self._fetch_account_data(self._client, acc_no, account_lookup)
+                self._fetch_account_data(client, acc_no, account_lookup)
                 for acc_no in account_numbers
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)

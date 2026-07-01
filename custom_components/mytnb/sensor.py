@@ -215,7 +215,13 @@ class MyTNBSensor(CoordinatorEntity[MyTNBDataUpdateCoordinator], SensorEntity):
             return None
         try:
             return self.entity_description.value_fn(data)
-        except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+        except (AttributeError, KeyError, IndexError, TypeError, ValueError) as err:
+            _LOGGER.debug(
+                "Failed to compute %s for account %s: %s",
+                self.entity_description.key,
+                self.account_number,
+                err,
+            )
             return None
 
     @property
