@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── Mock models matching python-mytnb Pydantic shapes ────────────────
 
 
@@ -94,7 +93,10 @@ def _raw_due_amount(amount_due: str = "26.16", due_date: str = "2026-06-30") -> 
     return {"AccountAmountDue": {"amountDue": amount_due, "billDueDate": due_date}}
 
 
-def _raw_bill_history(amount: str = "87.50", date_str: str = "2026-05-15") -> list[dict]:
+def _raw_bill_history(
+    amount: str = "87.50",
+    date_str: str = "2026-05-15",
+) -> list[dict]:
     """Raw API shape for get_bill_history()."""
     return [{"DtBill": date_str, "AmPayable": amount, "BillingNo": "12345"}]
 
