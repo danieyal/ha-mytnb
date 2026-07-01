@@ -67,18 +67,14 @@ async def test_setup_entry(hass: HomeAssistant, mock_mytnb_client) -> None:
         result = await async_setup_entry(hass, entry)
 
     assert result is True
-    assert DOMAIN in hass.data
-    assert "test_entry_id" in hass.data[DOMAIN]
+    assert entry.runtime_data is not None
 
 
 async def test_unload_entry(hass: HomeAssistant) -> None:
-    """Test unloading a config entry."""
+    """Test unloading a config entry closes the client."""
     mock_coordinator = MagicMock()
     mock_coordinator._client = MagicMock()
     mock_coordinator._client.close = AsyncMock()
-
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["test_entry_id"] = mock_coordinator
 
     entry = ConfigEntry(
         **_BASE_ENTRY,
@@ -96,16 +92,14 @@ async def test_unload_entry(hass: HomeAssistant) -> None:
         result = await async_unload_entry(hass, entry)
 
     assert result is True
-    assert "test_entry_id" not in hass.data[DOMAIN]
     mock_coordinator._client.close.assert_called_once()
 
 
 async def test_unload_entry_platform_failure(hass: HomeAssistant) -> None:
-    """Test unloading when platform unload fails."""
+    """Test unloading when platform unload fails leaves the client open."""
     mock_coordinator = MagicMock()
-    mock_coordinator._client = None
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["test_entry_id"] = mock_coordinator
+    mock_coordinator._client = MagicMock()
+    mock_coordinator._client.close = AsyncMock()
 
     entry = ConfigEntry(
         **_BASE_ENTRY,
@@ -123,7 +117,7 @@ async def test_unload_entry_platform_failure(hass: HomeAssistant) -> None:
         result = await async_unload_entry(hass, entry)
 
     assert result is False
-    assert "test_entry_id" in hass.data[DOMAIN]
+    mock_coordinator._client.close.assert_not_called()
 
 
 async def test_migrate_entry_v1_to_v2(hass: HomeAssistant) -> None:

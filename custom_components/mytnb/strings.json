@@ -41,5 +41,36 @@
       "unknown": "An unexpected error occurred.",
       "select_at_least_one": "Please select at least one account."
     }
+  },
+  "entity": {
+    "sensor": {
+      "current_usage": {
+        "name": "Current usage"
+      },
+      "average_usage": {
+        "name": "Average daily usage"
+      },
+      "current_cost": {
+        "name": "Current cost"
+      },
+      "projected_cost": {
+        "name": "Projected cost"
+      },
+      "monthly_usage": {
+        "name": "Monthly usage"
+      },
+      "monthly_cost": {
+        "name": "Monthly cost"
+      },
+      "due_amount": {
+        "name": "Amount due"
+      },
+      "last_payment_amount": {
+        "name": "Last payment amount"
+      },
+      "last_payment_date": {
+        "name": "Last payment date"
+      }
+    }
   }
 }

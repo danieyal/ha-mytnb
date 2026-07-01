@@ -121,8 +121,8 @@ async def test_sensor_unique_id(hass: HomeAssistant) -> None:
     assert sensor.unique_id == "mytnb_220123456789_current_usage"
 
 
-async def test_sensor_name(hass: HomeAssistant) -> None:
-    """Test sensor name format."""
+async def test_sensor_has_entity_name_and_device(hass: HomeAssistant) -> None:
+    """Test the sensor uses entity translations and a per-account device."""
     data = create_mock_account_data()
     coordinator = make_coordinator_mock(data)
 
@@ -130,33 +130,43 @@ async def test_sensor_name(hass: HomeAssistant) -> None:
         coordinator,
         SENSOR_DESCRIPTIONS[3],  # projected_cost
         "220123456789",
+        "Test Owner",
     )
-    assert sensor.name == "myTNB 220123456789 Projected Cost"
+    assert sensor.has_entity_name is True
+    assert sensor.translation_key == "projected_cost"
+    assert (DOMAIN, "220123456789") in sensor.device_info["identifiers"]
+    assert sensor.device_info["name"] == "Test Owner"
 
 
 async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:
-    """Test extra state attributes."""
+    """Test extra state attributes are scoped to the owning sensor."""
     data = create_mock_account_data()
     coordinator = make_coordinator_mock(data)
 
-    sensor = MyTNBSensor(
-        coordinator,
-        SENSOR_DESCRIPTIONS[0],
-        "220123456789",
-    )
-
-    attrs = sensor.extra_state_attributes
-
+    # Account metadata is present on every sensor.
+    usage_sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[0], "220123456789")
+    attrs = usage_sensor.extra_state_attributes
     assert attrs[ATTR_ACCOUNT_NUMBER] == "220123456789"
     assert attrs[ATTR_OWNER_NAME] == "Test Owner"
     assert attrs[ATTR_ADDRESS] == "123 Test St, Kuala Lumpur"
     assert attrs[ATTR_IS_SMART_METER] is True
-    assert len(attrs[ATTR_BILL_HISTORY]) == 1
-    assert attrs[ATTR_BILL_HISTORY][0]["amount"] == 87.50
-    assert len(attrs[ATTR_TARIFF_BLOCKS]) == 1
-    assert attrs[ATTR_TARIFF_BLOCKS][0]["rate"] == "0.218"
+    # Daily usage is scoped to the current_usage sensor only.
     assert len(attrs[ATTR_DAILY_USAGE]) == 1
     assert attrs[ATTR_DAILY_USAGE][0]["usage"] == 15.0
+    assert ATTR_BILL_HISTORY not in attrs
+    assert ATTR_TARIFF_BLOCKS not in attrs
+
+    # Tariff blocks live on the monthly_usage sensor.
+    monthly_sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[4], "220123456789")
+    monthly_attrs = monthly_sensor.extra_state_attributes
+    assert len(monthly_attrs[ATTR_TARIFF_BLOCKS]) == 1
+    assert monthly_attrs[ATTR_TARIFF_BLOCKS][0]["rate"] == "0.218"
+
+    # Bill history lives on the last_payment_amount sensor.
+    payment_sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[7], "220123456789")
+    payment_attrs = payment_sensor.extra_state_attributes
+    assert len(payment_attrs[ATTR_BILL_HISTORY]) == 1
+    assert payment_attrs[ATTR_BILL_HISTORY][0]["amount"] == 87.50
 
 
 async def test_sensor_extra_attributes_none_when_no_data(
@@ -180,10 +190,16 @@ async def test_sensor_descriptions_count() -> None:
 
 
 async def test_sensor_state_classes() -> None:
-    """Test sensor descriptions have valid state classes."""
+    """Test energy sensor descriptions carry a state class."""
+    from homeassistant.components.sensor import SensorDeviceClass
+
     for desc in SENSOR_DESCRIPTIONS:
         assert desc.key is not None
-        if desc.device_class == "date":
+        # Monetary and date sensors legitimately have no state class.
+        if desc.device_class in (
+            SensorDeviceClass.MONETARY,
+            SensorDeviceClass.DATE,
+        ):
             continue
         assert desc.state_class is not None
 
@@ -205,7 +221,11 @@ async def test_setup_entry_creates_sensors(hass: HomeAssistant) -> None:
 
 
 async def test_setup_entry_no_data(hass: HomeAssistant) -> None:
-    """Test async_setup_entry handles no coordinator data."""
+    """Entities are still created without data; they report unavailable.
+
+    This guards against the "entities unknown until reload" bug: entities
+    must exist immediately even if the first refresh has not populated data.
+    """
     coordinator = make_coordinator_mock()
     coordinator.data = None
     entry = make_entry_mock(coordinator)
@@ -216,7 +236,22 @@ async def test_setup_entry_no_data(hass: HomeAssistant) -> None:
         hass, entry, lambda e: _add_entities(e, added_entities)
     )
 
-    assert len(added_entities) == 0
+    assert len(added_entities) == 9
+    assert all(e.available is False for e in added_entities)
+
+
+async def test_sensor_available_reflects_account_presence(
+    hass: HomeAssistant,
+) -> None:
+    """Sensor is unavailable when its account is missing from coordinator data."""
+    coordinator = make_coordinator_mock(create_mock_account_data("111"))
+    coordinator.last_update_success = True
+
+    present = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[0], "111")
+    missing = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[0], "999")
+
+    assert present.available is True
+    assert missing.available is False
 
 
 async def test_setup_entry_multiple_accounts(hass: HomeAssistant) -> None:
