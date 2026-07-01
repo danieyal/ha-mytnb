@@ -75,7 +75,7 @@ async def test_unload_entry(hass: HomeAssistant) -> None:
     """Test unloading a config entry."""
     mock_coordinator = MagicMock()
     mock_coordinator._client = MagicMock()
-    mock_coordinator._client.aclose = AsyncMock()
+    mock_coordinator._client.close = AsyncMock()
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN]["test_entry_id"] = mock_coordinator
@@ -97,7 +97,7 @@ async def test_unload_entry(hass: HomeAssistant) -> None:
 
     assert result is True
     assert "test_entry_id" not in hass.data[DOMAIN]
-    mock_coordinator._client.aclose.assert_called_once()
+    mock_coordinator._client.close.assert_called_once()
 
 
 async def test_unload_entry_platform_failure(hass: HomeAssistant) -> None:
