@@ -154,7 +154,7 @@ async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:
     assert len(attrs[ATTR_BILL_HISTORY]) == 1
     assert attrs[ATTR_BILL_HISTORY][0]["amount"] == 87.50
     assert len(attrs[ATTR_TARIFF_BLOCKS]) == 1
-    assert attrs[ATTR_TARIFF_BLOCKS][0]["rate"] == 0.218
+    assert attrs[ATTR_TARIFF_BLOCKS][0]["rate"] == "0.218"
     assert len(attrs[ATTR_DAILY_USAGE]) == 1
     assert attrs[ATTR_DAILY_USAGE][0]["usage"] == 15.0
 

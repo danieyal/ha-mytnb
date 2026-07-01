@@ -3,34 +3,47 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
+# ── Mock models matching python-mytnb Pydantic shapes ────────────────
+
+
 @dataclass
 class MockTariffBlock:
-    block: str = "Block 1"
-    rate: float = 0.218
+    """Matches mytnb.models.MonthlyTariffBlock."""
+    block_id: str = "Block 1"
+    block_pricing: str = "0.218"
     usage: float = 200.0
-    cost: float = 43.60
+    amount: float = 43.60
 
 
 @dataclass
 class MockBillingMonth:
+    """Matches mytnb.models.BillingMonth."""
     month: int = 6
     year: int = 2026
-    usage_total: float = 450.0
-    amount_total: float = 98.10
+    usage_total: str = "450.0"
+    amount_total: str = "98.10"
     tariff_blocks: list[MockTariffBlock] = field(
         default_factory=lambda: [MockTariffBlock()],
     )
 
+    @property
+    def usage_kwh(self) -> float:
+        return float(self.usage_total)
+
+    @property
+    def amount_rm(self) -> float:
+        return float(self.amount_total)
+
 
 @dataclass
 class MockByMonth:
+    """Matches mytnb.models.ByMonthData."""
     months: list[MockBillingMonth] = field(
         default_factory=lambda: [MockBillingMonth()],
     )
@@ -38,66 +51,100 @@ class MockByMonth:
 
 @dataclass
 class MockDailyUsage:
-    date: date = date(2026, 6, 29)
-    usage: float = 15.0
-    cost: float = 3.27
+    """Matches mytnb.models.DailyUsage."""
+    date: str = "2026-06-29"
+    consumption: str = "15.0"
+    amount: str = "3.27"
+
+    @property
+    def consumption_kwh(self) -> float:
+        return float(self.consumption)
+
+    @property
+    def amount_rm(self) -> float:
+        return float(self.amount)
 
 
 @dataclass
-class MockDaily:
+class MockDailyUsageWeek:
+    """Matches mytnb.models.DailyUsageWeek."""
     days: list[MockDailyUsage] = field(
         default_factory=lambda: [MockDailyUsage()],
     )
 
 
-
 @dataclass
 class MockAccountUsage:
-    current_usage: float = 120.0
-    average_usage: float = 14.5
-    current_cost: float = 26.16
-    projected_cost: float = 115.00
+    """Matches mytnb.models.AccountUsage."""
+    current_usage_kwh: float = 120.0
+    average_usage_kwh: float = 14.5
+    current_cost_rm: float = 26.16
+    projected_cost_rm: float = 115.00
     by_month: MockByMonth = field(default_factory=MockByMonth)
-    daily: MockDaily = field(default_factory=MockDaily)
+    by_day: list[MockDailyUsageWeek] = field(
+        default_factory=lambda: [MockDailyUsageWeek()],
+    )
 
 
-def _make_bill_entry(
-    bill_date: date = date(2026, 5, 15),
-    amount: float = 87.50,
-) -> dict[str, Any]:
-    """Create a dict-style bill entry matching the new API."""
-    return {"date": bill_date, "amount": amount}
+# ── Raw API shapes (what the python-mytnb client returns) ────────────
 
 
-def _make_due_amount(amount_due: float = 26.16) -> dict[str, float]:
-    """Create a dict-style due amount matching the new API."""
-    return {"amount_due": amount_due}
+def _raw_due_amount(amount_due: str = "26.16", due_date: str = "2026-06-30") -> dict:
+    """Raw API shape for get_account_due_amount()."""
+    return {"AccountAmountDue": {"amountDue": amount_due, "billDueDate": due_date}}
+
+
+def _raw_bill_history(amount: str = "87.50", date_str: str = "2026-05-15") -> list[dict]:
+    """Raw API shape for get_bill_history()."""
+    return [{"DtBill": date_str, "AmPayable": amount, "BillingNo": "12345"}]
+
+
+# ── Normalized shapes (what the coordinator stores) ──────────────────
+
+
+def _norm_due(amount_due: float = 26.16, due_date: str = "2026-06-30") -> dict:
+    """Normalized due amount after coordinator normalization."""
+    return {"amount_due": amount_due, "due_date": due_date}
+
+
+def _norm_bill_entry(amount: float = 87.50, date_str: str = "2026-05-15") -> dict:
+    """Normalized bill history entry after coordinator normalization."""
+    return {"date": date_str, "amount": amount}
+
+
+# ── Mock CustomerAccount ─────────────────────────────────────────────
 
 
 @dataclass
 class MockCustomerAccount:
+    """Matches mytnb.models.CustomerAccount."""
     account_number: str = "220123456789"
     owner_name: str = "Test Owner"
-    address: str = "123 Test St, Kuala Lumpur"
+    account_st_address: str = "123 Test St, Kuala Lumpur"
     is_smart_meter: bool = True
+
+    @property
+    def address(self) -> str:
+        """Alias for sensor extra_state_attributes compatibility."""
+        return self.account_st_address
 
 
 def create_mock_account_data(
     account_number: str = "220123456789",
 ) -> dict[str, Any]:
-    """Create a mock coordinator data entry for a single account."""
+    """Create a mock coordinator data entry (normalized shape)."""
     return {
         account_number: {
             "account": MockCustomerAccount(account_number=account_number),
             "usage": MockAccountUsage(),
-            "bill_history": [_make_bill_entry()],
-            "due": _make_due_amount(),
+            "bill_history": [_norm_bill_entry()],
+            "due": _norm_due(),
         }
     }
 
 
 def create_mock_client() -> MagicMock:
-    """Create a fully mocked MyTNBClient."""
+    """Create a fully mocked MyTNBClient returning *raw* API shapes."""
     client = MagicMock()
     client.get_customer_accounts = AsyncMock(
         return_value=[MockCustomerAccount()],
@@ -106,12 +153,11 @@ def create_mock_client() -> MagicMock:
         return_value=MockAccountUsage(),
     )
     client.get_bill_history = AsyncMock(
-        return_value=[_make_bill_entry()],
+        return_value=_raw_bill_history(),
     )
     client.get_account_due_amount = AsyncMock(
-        return_value=_make_due_amount(),
+        return_value=_raw_due_amount(),
     )
-    client.aclose = AsyncMock()
     client.close = AsyncMock()
     return client
 
