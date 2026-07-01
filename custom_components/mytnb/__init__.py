@@ -13,7 +13,6 @@ from .const import (
     CONF_ACCOUNT_NUMBER,
     CONF_ACCOUNTS,
     CONF_OWNER_NAME,
-    DOMAIN,
     PLATFORMS,
 )
 from .coordinator import MyTNBDataUpdateCoordinator
@@ -33,8 +32,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: MyTNBConfigEntry) -> boo
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -49,7 +46,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: MyTNBConfigEntry) -> bo
 
     if unload_ok:
         coordinator = entry.runtime_data
-        hass.data[DOMAIN].pop(entry.entry_id)
         if coordinator and coordinator._client:
             await coordinator._client.close()
 

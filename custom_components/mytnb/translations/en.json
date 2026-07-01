@@ -48,7 +48,7 @@
         "name": "Current usage"
       },
       "average_usage": {
-        "name": "Average usage"
+        "name": "Average daily usage"
       },
       "current_cost": {
         "name": "Current cost"
@@ -63,7 +63,7 @@
         "name": "Monthly cost"
       },
       "due_amount": {
-        "name": "Due amount"
+        "name": "Amount due"
       },
       "last_payment_amount": {
         "name": "Last payment amount"

@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 import mytnb
@@ -57,12 +58,10 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.warning("No accounts configured, skipping data fetch")
             return {}
 
-        client = await self._get_client()
         account_numbers = self.account_numbers
 
         try:
-            # Fetch account metadata once for all configured accounts
-            all_accounts = await client.get_customer_accounts()
+            all_accounts = await self._discover_accounts()
             account_lookup = {acc.account_number: acc for acc in all_accounts}
             _LOGGER.debug(
                 "Discovered %d accounts, fetching data for %d configured",
@@ -71,17 +70,23 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
             )
 
             tasks = [
-                self._fetch_account_data(client, acc_no, account_lookup)
+                self._fetch_account_data(self._client, acc_no, account_lookup)
                 for acc_no in account_numbers
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        except ConfigEntryAuthFailed:
+            raise
         except (APIError, MyTNBError) as err:
             raise UpdateFailed(f"API error: {err}") from err
         except Exception as err:
             raise UpdateFailed(f"Unexpected error: {err}") from err
 
-        data: dict[str, dict] = {}
+        # Start from the previously-known data so that when *some* accounts
+        # succeed, a transient failure on another keeps its last value instead
+        # of flapping to unavailable.
+        data: dict[str, dict] = dict(self.data or {})
+        succeeded = 0
         for acc_no, result in zip(account_numbers, results, strict=True):
             if isinstance(result, Exception):
                 _LOGGER.warning(
@@ -90,6 +95,7 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                     result,
                 )
                 continue
+            succeeded += 1
             data[acc_no] = {
                 "account": result["account"],
                 "usage": result["usage"],
@@ -97,26 +103,49 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 "due": result["due"],
             }
 
-        return data
+        # If nothing at all succeeded this cycle, treat it as a real failure.
+        # On first refresh this becomes ConfigEntryNotReady (HA retries setup);
+        # afterwards it marks entities unavailable while self.data retains the
+        # last-known values for when the API recovers.
+        if succeeded == 0:
+            raise UpdateFailed("Failed fetching data for all configured accounts")
+
+        # Only keep accounts that are still configured.
+        return {acc_no: data[acc_no] for acc_no in account_numbers if acc_no in data}
+
+    async def _discover_accounts(self) -> list[Any]:
+        """Discover linked accounts, logging in / re-logging in as needed.
+
+        This is the single per-cycle call that both verifies the session and
+        returns account metadata, avoiding a redundant second request.
+        """
+        client = await self._get_client()
+        try:
+            return await client.get_customer_accounts()
+        except AuthenticationError:
+            _LOGGER.debug("Session expired, re-logging in")
+            try:
+                self._client = await mytnb.MyTNBClient.login(
+                    self._email, self._password
+                )
+                return await self._client.get_customer_accounts()
+            except AuthenticationError as err:
+                raise ConfigEntryAuthFailed(
+                    f"Authentication failed for {self._email}"
+                ) from err
 
     async def _get_client(self) -> mytnb.MyTNBClient:
-        """Return an authenticated client, re-logging in if needed."""
+        """Return an authenticated client, logging in on first use."""
         if self._client is None:
-            self._client = await mytnb.MyTNBClient.login(
-                self._email, self._password
-            )
+            try:
+                self._client = await mytnb.MyTNBClient.login(
+                    self._email, self._password
+                )
+            except AuthenticationError as err:
+                raise ConfigEntryAuthFailed(
+                    f"Authentication failed for {self._email}"
+                ) from err
             _LOGGER.debug("Logged in as %s", self._email)
-            return self._client
-
-        try:
-            # Light session check: re-discover accounts to verify session
-            await self._client.get_customer_accounts()
-        except (AuthenticationError, APIError):
-            _LOGGER.debug("Session expired, re-logging in")
-            self._client = await mytnb.MyTNBClient.login(
-                self._email, self._password
-            )
-
         return self._client
 
     async def _fetch_account_data(

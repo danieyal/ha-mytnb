@@ -103,7 +103,7 @@ async def test_coordinator_login_on_first_use(
 async def test_coordinator_relogin_on_auth_error(
     hass: HomeAssistant,
 ) -> None:
-    """Test coordinator re-logins when session expires."""
+    """Test coordinator re-logins once when the session has expired."""
     from mytnb.exceptions import AuthenticationError
 
     mock_client1 = create_mock_client()
@@ -121,10 +121,97 @@ async def test_coordinator_relogin_on_auth_error(
     mytnb.MyTNBClient.login = AsyncMock(return_value=mock_client2)
 
     try:
-        client = await coordinator._get_client()
-        assert client is mock_client2
+        accounts = await coordinator._discover_accounts()
+        # Re-login swapped in the fresh client and its discovery succeeded.
+        assert coordinator._client is mock_client2
+        assert accounts == [MockCustomerAccount()]
     finally:
         mytnb.MyTNBClient.login = original
+
+
+async def test_coordinator_auth_failure_raises_config_entry_auth_failed(
+    hass: HomeAssistant,
+) -> None:
+    """A persistent auth failure surfaces as ConfigEntryAuthFailed."""
+    from homeassistant.exceptions import ConfigEntryAuthFailed
+    from mytnb.exceptions import AuthenticationError
+
+    mock_client = create_mock_client()
+    mock_client.get_customer_accounts = AsyncMock(
+        side_effect=AuthenticationError("session expired")
+    )
+
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+
+    import mytnb
+
+    original = mytnb.MyTNBClient.login
+    # Re-login also fails authentication.
+    mytnb.MyTNBClient.login = AsyncMock(
+        side_effect=AuthenticationError("bad credentials")
+    )
+
+    try:
+        with pytest.raises(ConfigEntryAuthFailed):
+            await coordinator._async_update_data()
+    finally:
+        mytnb.MyTNBClient.login = original
+
+
+async def test_coordinator_total_failure_raises_update_failed(
+    hass: HomeAssistant,
+) -> None:
+    """When every account fetch fails and there is no prior data, fail hard."""
+    mock_client = create_mock_client()
+    mock_client.get_account_usage_smart = AsyncMock(
+        side_effect=RuntimeError("boom")
+    )
+
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_coordinator_retains_stale_data_on_transient_failure(
+    hass: HomeAssistant,
+) -> None:
+    """When one account blips but another succeeds, the blip keeps its value."""
+    accounts = [
+        make_account_dict("aaa"),
+        make_account_dict("bbb"),
+    ]
+    mock_client = create_mock_client()
+    mock_client.get_customer_accounts = AsyncMock(
+        return_value=[
+            MockCustomerAccount(account_number="aaa"),
+            MockCustomerAccount(account_number="bbb"),
+        ]
+    )
+
+    coordinator = _make_coordinator(hass, accounts=accounts)
+    coordinator._client = mock_client
+
+    # First cycle: both accounts succeed and populate data.
+    first = await coordinator._async_update_data()
+    assert "aaa" in first and "bbb" in first
+    coordinator.data = first  # emulate DataUpdateCoordinator storing the result
+
+    # Second cycle: usage fetch fails only for account "bbb".
+    async def fail_for_bbb(acc_no):
+        if acc_no == "bbb":
+            raise RuntimeError("transient")
+        return MockAccountUsage()
+
+    mock_client.get_account_usage_smart = fail_for_bbb
+    second = await coordinator._async_update_data()
+
+    # "aaa" refreshes; "bbb" is retained with its previous value, not dropped.
+    assert "aaa" in second
+    assert "bbb" in second
+    assert second["bbb"] == first["bbb"]
 
 
 async def test_coordinator_partial_failure(
