@@ -79,6 +79,46 @@ async def test_sensor_native_value(hass: HomeAssistant) -> None:
     assert due_sensor.native_value == 26.16
 
 
+async def test_last_payment_date_returns_date_object(hass: HomeAssistant) -> None:
+    """The DATE-device-class sensor must surface a date, not a raw string.
+
+    The library parses myTNB's DD/MM/YYYY into a date; HA calls .isoformat() on
+    the value, so a string state would raise "Invalid date". Guards the regression.
+    """
+    from datetime import date
+
+    from mytnb.models import BillHistoryEntry
+
+    data = create_mock_account_data()
+    data["220123456789"]["bill_history"] = [
+        BillHistoryEntry.model_validate({"DtBill": "31/05/2026", "AmPayable": "87.50"})
+    ]
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(
+        coordinator,
+        SENSOR_DESCRIPTIONS[8],  # last_payment_date
+        "220123456789",
+    )
+    assert sensor.native_value == date(2026, 5, 31)
+
+
+async def test_last_payment_date_unparseable_returns_none(
+    hass: HomeAssistant,
+) -> None:
+    """An unparseable date degrades to None instead of raising."""
+    from mytnb.models import BillHistoryEntry
+
+    data = create_mock_account_data()
+    data["220123456789"]["bill_history"] = [
+        BillHistoryEntry.model_validate({"DtBill": "not-a-date", "AmPayable": "1.0"})
+    ]
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[8], "220123456789")
+    assert sensor.native_value is None
+
+
 async def test_sensor_native_value_when_none(hass: HomeAssistant) -> None:
     """Test sensor returns None when coordinator has no data."""
     coordinator = make_coordinator_mock()
