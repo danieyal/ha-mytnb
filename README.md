@@ -1,21 +1,26 @@
 # Home Assistant myTNB Integration
 
-Home Assistant custom component for [myTNB](https://github.com/danieyal/python-mytnb) — monitor your Tenaga Nasional Berhad electricity accounts.
+Home Assistant custom component for [myTNB](https://www.mytnb.com.my). Monitor your Tenaga Nasional Berhad electricity accounts.
 
 ## Features
 
-- **Account auto-discovery** — one login discovers all linked TNB accounts
-- **Usage tracking** — current, average, and monthly kWh consumption
-- **Cost monitoring** — current, projected, and monthly billing in RM
-- **Bill history** — last payment date/amount, outstanding balance
-- **Smart meter support** — SMR status per account
-- **Rich attributes** — daily breakdown, tariff blocks, full bill history
+- **Account auto-discovery**: one login discovers all linked TNB accounts
+- **Usage tracking**: current, average, and monthly kWh consumption
+- **Cost monitoring**: current, projected, and monthly billing in RM
+- **Bill history**: last payment date/amount, outstanding balance
+- **Smart meter support**: SMR status per account
+- **Rich attributes**: daily breakdown, tariff blocks, full bill history
 
 ## Installation
 
 ### HACS (recommended)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=your-org&repository=ha-mytnb&category=integration)
+
+Or
+
+1. Add this repository as a custom repository in HACS
+2. Search for **myTNB** in HACS and install
 
 ### Manual
 
