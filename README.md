@@ -1,6 +1,6 @@
 # Home Assistant myTNB Integration
 
-Home Assistant custom component for [myTNB](https://www.mytnb.com.my). Monitor your Tenaga Nasional Berhad electricity accounts.
+A Home Assistant custom component for [myTNB](https://www.mytnb.com.my). Monitor your Tenaga Nasional Berhad electricity accounts.
 
 ## Features
 
@@ -17,10 +17,12 @@ Home Assistant custom component for [myTNB](https://www.mytnb.com.my). Monitor y
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=danieyal&repository=ha-mytnb&category=integration)
 
-Or
+Alternatively:
 
-1. Add this repository as a custom repository in HACS
-2. Search for **myTNB** in HACS and install
+1. In HACS, go to **Integrations**
+2. Open the **⋮** menu (top right) → **Custom repositories**
+3. Add `https://github.com/danieyal/ha-mytnb` with category **Integration**
+4. Search for **myTNB** in HACS and install
 
 ### Manual
 
