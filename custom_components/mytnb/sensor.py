@@ -88,26 +88,28 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         value_fn=lambda data: data["usage"].projected_cost_rm,
     ),
     MyTNBSensorEntityDescription(
-        key="monthly_usage",
-        translation_key="monthly_usage",
+        key="last_month_usage",
+        translation_key="last_month_usage",
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: (
-            data["usage"].by_month.months[0].usage_kwh
+            (m := _last_billed_month(data["usage"].by_month))
+            and m.usage_kwh
             if data["usage"].by_month and data["usage"].by_month.months
             else None
         ),
         attr_keys=(ATTR_TARIFF_BLOCKS,),
     ),
     MyTNBSensorEntityDescription(
-        key="monthly_cost",
-        translation_key="monthly_cost",
+        key="last_month_cost",
+        translation_key="last_month_cost",
         device_class=SensorDeviceClass.MONETARY,
         native_unit_of_measurement=CURRENCY_RM,
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: (
-            data["usage"].by_month.months[0].amount_rm
+            (m := _last_billed_month(data["usage"].by_month))
+            and m.amount_rm
             if data["usage"].by_month and data["usage"].by_month.months
             else None
         ),
@@ -151,6 +153,19 @@ def _first_payment(payment_history: list[Any]) -> Any | None:
     for entry in payment_history:
         if getattr(entry, "is_payment", False):
             return entry
+    return None
+
+
+def _last_billed_month(by_month: Any) -> Any | None:
+    """Return the most recent *billed* (non-unbilled) month, or None.
+
+    The API returns months in chronological order (oldest first).  The last
+    entry is typically the current unbilled cycle, so we walk backwards to
+    find the most recent completed billing month.
+    """
+    for month in reversed(by_month.months):
+        if not getattr(month, "is_unbilled", False):
+            return month
     return None
 
 
@@ -293,8 +308,8 @@ def _build_attribute(key: str, data: dict[str, Any]) -> Any:
     if key == ATTR_TARIFF_BLOCKS:
         if not (usage and usage.by_month and usage.by_month.months):
             return None
-        month = usage.by_month.months[0]
-        if not month.tariff_blocks:
+        month = _last_billed_month(usage.by_month)
+        if month is None or not month.tariff_blocks:
             return None
         return [
             {

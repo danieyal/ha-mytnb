@@ -5,8 +5,8 @@ A Home Assistant custom integration for [myTNB](https://www.mytnb.com.my). Monit
 ## Features
 
 - **Account auto-discovery**: one login discovers all linked TNB accounts
-- **Usage tracking**: current, average, and monthly kWh consumption
-- **Cost monitoring**: current, projected, and monthly billing in RM
+- **Usage tracking**: current, average, and last completed month's kWh consumption
+- **Cost monitoring**: current, projected, and last completed month's billing in RM
 - **Bill history**: last payment date/amount, outstanding balance
 - **Smart meter support**: SMR status per account
 - **Rich attributes**: daily breakdown, tariff blocks, full bill history
@@ -39,17 +39,17 @@ Copy `custom_components/mytnb/` into your Home Assistant `custom_components/` di
 
 For each discovered account (e.g. `220123456789`):
 
-| Sensor | Unit | Description |
-|---|---|---|
-| `sensor.mytnb_<acc>_current_usage` | kWh | Current billing period usage |
-| `sensor.mytnb_<acc>_average_usage` | kWh | Average daily usage |
-| `sensor.mytnb_<acc>_current_cost` | RM | Current billing period cost |
-| `sensor.mytnb_<acc>_projected_cost` | RM | Projected billing period cost |
-| `sensor.mytnb_<acc>_monthly_usage` | kWh | Latest complete month usage |
-| `sensor.mytnb_<acc>_monthly_cost` | RM | Latest complete month cost |
-| `sensor.mytnb_<acc>_due_amount` | RM | Outstanding balance |
-| `sensor.mytnb_<acc>_last_payment_amount` | RM | Last payment amount |
-| `sensor.mytnb_<acc>_last_payment_date` | date | Last payment date |
+| Sensor                                   | Unit | Description                        |
+| ---------------------------------------- | ---- | ---------------------------------- |
+| `sensor.mytnb_<acc>_current_usage`       | kWh  | Current billing period usage       |
+| `sensor.mytnb_<acc>_average_usage`       | kWh  | Average daily usage                |
+| `sensor.mytnb_<acc>_current_cost`        | RM   | Current billing period cost        |
+| `sensor.mytnb_<acc>_projected_cost`      | RM   | Projected billing period cost      |
+| `sensor.mytnb_<acc>_last_month_usage`    | kWh  | Last completed billing month usage |
+| `sensor.mytnb_<acc>_last_month_cost`     | RM   | Last completed billing month cost  |
+| `sensor.mytnb_<acc>_due_amount`          | RM   | Outstanding balance                |
+| `sensor.mytnb_<acc>_last_payment_amount` | RM   | Last payment amount                |
+| `sensor.mytnb_<acc>_last_payment_date`   | date | Last payment date                  |
 
 Each sensor includes attributes for account details, daily usage, tariff blocks, and bill history.
 
