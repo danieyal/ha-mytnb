@@ -23,7 +23,13 @@ from mytnb.exceptions import (
     MyTNBError,
 )
 
-from .const import CONF_ACCOUNT_NUMBER, CONF_ACCOUNTS, CONF_IS_OWNED, CONF_OWNER_NAME, DOMAIN
+from .const import (
+    CONF_ACCOUNT_NUMBER,
+    CONF_ACCOUNTS,
+    CONF_IS_OWNED,
+    CONF_OWNER_NAME,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
