@@ -131,7 +131,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
             if (payment := _first_payment(data.get("payment_history", [])))
             else None
         ),
-        attr_keys=(ATTR_PAYMENT_HISTORY,),
+        attr_keys=(ATTR_PAYMENT_HISTORY, ATTR_BILL_HISTORY),
     ),
     MyTNBSensorEntityDescription(
         key="last_payment_date",

@@ -230,6 +230,10 @@ async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:
     assert payment_attrs[ATTR_PAYMENT_HISTORY][0]["amount"] == 100.50
     assert payment_attrs[ATTR_PAYMENT_HISTORY][0]["is_payment"] is True
     assert payment_attrs[ATTR_PAYMENT_HISTORY][1]["is_payment"] is False
+    # Bill history is still exposed alongside payment history for backwards compat.
+    assert len(payment_attrs[ATTR_BILL_HISTORY]) == 1
+    assert payment_attrs[ATTR_BILL_HISTORY][0]["amount"] == 87.50
+    assert payment_attrs[ATTR_BILL_HISTORY][0]["date"] == date(2026, 5, 15)
 
     # Due date lives on the due_amount sensor and is a date, not a raw string.
     due_sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[6], "220123456789")
@@ -237,6 +241,7 @@ async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:
     assert due_attrs[ATTR_DUE_DATE] == date(2026, 6, 30)
     assert isinstance(due_attrs[ATTR_DUE_DATE], date)
     assert ATTR_PAYMENT_HISTORY not in due_attrs
+    assert ATTR_BILL_HISTORY not in due_attrs
 
 
 async def test_last_payment_amount(hass: HomeAssistant) -> None:

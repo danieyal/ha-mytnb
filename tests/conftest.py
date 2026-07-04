@@ -150,7 +150,8 @@ def create_mock_account_data(
     """Create a mock coordinator data entry.
 
     Mirrors what the coordinator stores: typed models straight from the client
-    (``AccountDueAmount`` / ``list[BillHistoryEntry]``), no dict normalization.
+    (``AccountDueAmount`` / ``list[BillHistoryEntry]`` /
+    ``list[PaymentHistoryEntry]``), no dict normalization.
     """
     return {
         account_number: {

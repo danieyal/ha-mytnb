@@ -61,13 +61,14 @@ async def _validate_login(
 
 
 def _build_accounts_schema(
-    discovered: list[dict[str, str]],
+    discovered: list[dict[str, Any]],
     preselected: set[str] | None = None,
 ) -> vol.Schema:
     """Build a multi-select schema for account selection.
 
     Args:
-        discovered: List of account dicts with account_number and owner_name.
+        discovered: List of account dicts with account_number, owner_name,
+            and is_owned.
         preselected: Set of account numbers to pre-select (None = none selected).
     """
     options = {
