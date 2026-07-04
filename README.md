@@ -1,6 +1,6 @@
 # Home Assistant myTNB Integration
 
-A Home Assistant custom component for [myTNB](https://www.mytnb.com.my). Monitor your Tenaga Nasional Berhad electricity accounts.
+A Home Assistant custom integration for [myTNB](https://www.mytnb.com.my). Monitor your Tenaga Nasional Berhad electricity accounts.
 
 ## Features
 
