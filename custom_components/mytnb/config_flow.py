@@ -23,7 +23,13 @@ from mytnb.exceptions import (
     MyTNBError,
 )
 
-from .const import CONF_ACCOUNT_NUMBER, CONF_ACCOUNTS, CONF_OWNER_NAME, DOMAIN
+from .const import (
+    CONF_ACCOUNT_NUMBER,
+    CONF_ACCOUNTS,
+    CONF_IS_OWNED,
+    CONF_OWNER_NAME,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,10 +43,10 @@ DATA_SCHEMA = vol.Schema(
 
 async def _validate_login(
     email: str, password: str
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Validate login credentials and return discovered accounts.
 
-    Returns a list of dicts with account_number and owner_name.
+    Returns a list of dicts with account_number, owner_name, and is_owned.
     """
     client = await mytnb.MyTNBClient.login(email, password)
     accounts = await client.get_customer_accounts()
@@ -48,19 +54,21 @@ async def _validate_login(
         {
             CONF_ACCOUNT_NUMBER: acc.account_number,
             CONF_OWNER_NAME: acc.owner_name,
+            CONF_IS_OWNED: acc.is_owned_bool,
         }
         for acc in accounts
     ]
 
 
 def _build_accounts_schema(
-    discovered: list[dict[str, str]],
+    discovered: list[dict[str, Any]],
     preselected: set[str] | None = None,
 ) -> vol.Schema:
     """Build a multi-select schema for account selection.
 
     Args:
-        discovered: List of account dicts with account_number and owner_name.
+        discovered: List of account dicts with account_number, owner_name,
+            and is_owned.
         preselected: Set of account numbers to pre-select (None = none selected).
     """
     options = {

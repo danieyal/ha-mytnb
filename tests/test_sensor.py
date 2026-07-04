@@ -15,6 +15,7 @@ from custom_components.mytnb.const import (
     ATTR_DUE_DATE,
     ATTR_IS_SMART_METER,
     ATTR_OWNER_NAME,
+    ATTR_PAYMENT_HISTORY,
     ATTR_TARIFF_BLOCKS,
     CONF_ACCOUNTS,
     DOMAIN,
@@ -89,11 +90,14 @@ async def test_last_payment_date_returns_date_object(hass: HomeAssistant) -> Non
     """
     from datetime import date
 
-    from mytnb.models import BillHistoryEntry
+    from mytnb.models import PaymentHistoryEntry
 
     data = create_mock_account_data()
-    data["220123456789"]["bill_history"] = [
-        BillHistoryEntry.model_validate({"DtBill": "31/05/2026", "AmPayable": "87.50"})
+    data["220123456789"]["payment_history"] = [
+        PaymentHistoryEntry.model_validate(
+            {"BillOrPaymentDate": "31/05/2026", "Amount": "87.50",
+             "HistoryType": "Payment"}
+        )
     ]
     coordinator = make_coordinator_mock(data)
 
@@ -109,11 +113,14 @@ async def test_last_payment_date_unparseable_returns_none(
     hass: HomeAssistant,
 ) -> None:
     """An unparseable date degrades to None instead of raising."""
-    from mytnb.models import BillHistoryEntry
+    from mytnb.models import PaymentHistoryEntry
 
     data = create_mock_account_data()
-    data["220123456789"]["bill_history"] = [
-        BillHistoryEntry.model_validate({"DtBill": "not-a-date", "AmPayable": "1.0"})
+    data["220123456789"]["payment_history"] = [
+        PaymentHistoryEntry.model_validate(
+            {"BillOrPaymentDate": "not-a-date", "Amount": "1.0",
+             "HistoryType": "Payment"}
+        )
     ]
     coordinator = make_coordinator_mock(data)
 
@@ -204,9 +211,26 @@ async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:
     assert len(monthly_attrs[ATTR_TARIFF_BLOCKS]) == 1
     assert monthly_attrs[ATTR_TARIFF_BLOCKS][0]["rate"] == "0.218"
 
-    # Bill history lives on the last_payment_amount sensor; dates stay typed.
+    # Payment history lives on the last_payment_amount sensor.
+    from mytnb.models import PaymentHistoryEntry
+
+    data["220123456789"]["payment_history"] = [
+        PaymentHistoryEntry.model_validate(
+            {"BillOrPaymentDate": "15/05/2026", "Amount": "100.50",
+             "HistoryType": "Payment"}
+        ),
+        PaymentHistoryEntry.model_validate(
+            {"BillOrPaymentDate": "01/06/2026", "Amount": "45.00",
+             "HistoryType": "Bill"}
+        ),
+    ]
     payment_sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[7], "220123456789")
     payment_attrs = payment_sensor.extra_state_attributes
+    assert len(payment_attrs[ATTR_PAYMENT_HISTORY]) == 2
+    assert payment_attrs[ATTR_PAYMENT_HISTORY][0]["amount"] == 100.50
+    assert payment_attrs[ATTR_PAYMENT_HISTORY][0]["is_payment"] is True
+    assert payment_attrs[ATTR_PAYMENT_HISTORY][1]["is_payment"] is False
+    # Bill history is still exposed alongside payment history for backwards compat.
     assert len(payment_attrs[ATTR_BILL_HISTORY]) == 1
     assert payment_attrs[ATTR_BILL_HISTORY][0]["amount"] == 87.50
     assert payment_attrs[ATTR_BILL_HISTORY][0]["date"] == date(2026, 5, 15)
@@ -216,7 +240,60 @@ async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:
     due_attrs = due_sensor.extra_state_attributes
     assert due_attrs[ATTR_DUE_DATE] == date(2026, 6, 30)
     assert isinstance(due_attrs[ATTR_DUE_DATE], date)
+    assert ATTR_PAYMENT_HISTORY not in due_attrs
     assert ATTR_BILL_HISTORY not in due_attrs
+
+
+async def test_last_payment_amount(hass: HomeAssistant) -> None:
+    """Test last_payment_amount returns the first payment entry's amount."""
+    from mytnb.models import PaymentHistoryEntry
+
+    data = create_mock_account_data()
+    data["220123456789"]["payment_history"] = [
+        PaymentHistoryEntry.model_validate(
+            {"BillOrPaymentDate": "10/01/2026", "Amount": "55.00",
+             "HistoryType": "Bill"}
+        ),
+        PaymentHistoryEntry.model_validate(
+            {"BillOrPaymentDate": "31/05/2026", "Amount": "87.50",
+             "HistoryType": "Payment"}
+        ),
+        PaymentHistoryEntry.model_validate(
+            {"BillOrPaymentDate": "15/06/2026", "Amount": "22.00",
+             "HistoryType": "Bill"}
+        ),
+    ]
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(
+        coordinator,
+        SENSOR_DESCRIPTIONS[7],  # last_payment_amount
+        "220123456789",
+    )
+    assert sensor.native_value == 87.50
+
+
+async def test_last_payment_amount_no_payments_returns_none(
+    hass: HomeAssistant,
+) -> None:
+    """Test last_payment_amount returns None when no payment entries exist."""
+    from mytnb.models import PaymentHistoryEntry
+
+    data = create_mock_account_data()
+    data["220123456789"]["payment_history"] = [
+        PaymentHistoryEntry.model_validate(
+            {"BillOrPaymentDate": "10/01/2026", "Amount": "55.00",
+             "HistoryType": "Bill"}
+        ),
+    ]
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(
+        coordinator,
+        SENSOR_DESCRIPTIONS[7],  # last_payment_amount
+        "220123456789",
+    )
+    assert sensor.native_value is None
 
 
 async def test_sensor_extra_attributes_none_when_no_data(

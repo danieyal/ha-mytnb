@@ -136,6 +136,7 @@ class MockCustomerAccount:
     owner_name: str = "Test Owner"
     account_st_address: str = "123 Test St, Kuala Lumpur"
     is_smart_meter: bool = True
+    is_owned_bool: bool = True
 
     @property
     def address(self) -> str:
@@ -149,13 +150,15 @@ def create_mock_account_data(
     """Create a mock coordinator data entry.
 
     Mirrors what the coordinator stores: typed models straight from the client
-    (``AccountDueAmount`` / ``list[BillHistoryEntry]``), no dict normalization.
+    (``AccountDueAmount`` / ``list[BillHistoryEntry]`` /
+    ``list[PaymentHistoryEntry]``), no dict normalization.
     """
     return {
         account_number: {
             "account": MockCustomerAccount(account_number=account_number),
             "usage": MockAccountUsage(),
             "bill_history": _bill_history(),
+            "payment_history": [],
             "due": _due_amount(),
         }
     }
@@ -175,6 +178,9 @@ def create_mock_client() -> MagicMock:
     )
     client.get_bill_history = AsyncMock(
         return_value=_bill_history(),
+    )
+    client.get_payment_history = AsyncMock(
+        return_value=[],
     )
     client.get_account_due_amount = AsyncMock(
         return_value=_due_amount(),

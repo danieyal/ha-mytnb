@@ -8,6 +8,7 @@ CONF_PASSWORD = "password"
 CONF_ACCOUNTS = "accounts"
 CONF_ACCOUNT_NUMBER = "account_number"
 CONF_OWNER_NAME = "owner_name"
+CONF_IS_OWNED = "is_owned"
 
 DEFAULT_POLL_INTERVAL = timedelta(hours=1)
 
@@ -20,5 +21,6 @@ ATTR_ADDRESS = "address"
 ATTR_IS_SMART_METER = "is_smart_meter"
 ATTR_DAILY_USAGE = "daily_usage"
 ATTR_BILL_HISTORY = "bill_history"
+ATTR_PAYMENT_HISTORY = "payment_history"
 ATTR_TARIFF_BLOCKS = "tariff_blocks"
 ATTR_DUE_DATE = "due_date"

@@ -29,6 +29,7 @@ from .const import (
     ATTR_DUE_DATE,
     ATTR_IS_SMART_METER,
     ATTR_OWNER_NAME,
+    ATTR_PAYMENT_HISTORY,
     ATTR_TARIFF_BLOCKS,
     CONF_ACCOUNT_NUMBER,
     CONF_ACCOUNTS,
@@ -126,19 +127,31 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         device_class=SensorDeviceClass.MONETARY,
         native_unit_of_measurement=CURRENCY_RM,
         value_fn=lambda data: (
-            data["bill_history"][0].amount if data["bill_history"] else None
+            payment.amount
+            if (payment := _first_payment(data.get("payment_history", [])))
+            else None
         ),
-        attr_keys=(ATTR_BILL_HISTORY,),
+        attr_keys=(ATTR_PAYMENT_HISTORY, ATTR_BILL_HISTORY),
     ),
     MyTNBSensorEntityDescription(
         key="last_payment_date",
         translation_key="last_payment_date",
         device_class=SensorDeviceClass.DATE,
         value_fn=lambda data: (
-            data["bill_history"][0].date if data["bill_history"] else None
+            payment.date
+            if (payment := _first_payment(data.get("payment_history", [])))
+            else None
         ),
     ),
 ]
+
+
+def _first_payment(payment_history: list[Any]) -> Any | None:
+    """Return the first (most recent) payment entry, or None if no payments."""
+    for entry in payment_history:
+        if getattr(entry, "is_payment", False):
+            return entry
+    return None
 
 
 async def async_setup_entry(
@@ -261,6 +274,20 @@ def _build_attribute(key: str, data: dict[str, Any]) -> Any:
             return None
         return [
             {"date": bill.date, "amount": bill.amount} for bill in bill_history
+        ]
+
+    if key == ATTR_PAYMENT_HISTORY:
+        payment_history = data.get("payment_history") or []
+        if not payment_history:
+            return None
+        return [
+            {
+                "date": p.date,
+                "amount": p.amount,
+                "is_payment": p.is_payment,
+                "history_type": p.history_type,
+            }
+            for p in payment_history
         ]
 
     if key == ATTR_TARIFF_BLOCKS:
