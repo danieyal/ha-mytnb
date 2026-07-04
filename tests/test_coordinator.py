@@ -201,7 +201,7 @@ async def test_coordinator_retains_stale_data_on_transient_failure(
 
     # Second cycle: usage fetch fails only for account "bbb".
     async def fail_for_bbb(acc_no):
-        if acc_no == "bbb":
+        if getattr(acc_no, "account_number", acc_no) == "bbb":
             raise RuntimeError("transient")
         return MockAccountUsage()
 
@@ -232,7 +232,7 @@ async def test_coordinator_partial_failure(
     )
 
     async def fail_for_bad(acc_no):
-        if acc_no == "bad":
+        if getattr(acc_no, "account_number", acc_no) == "bad":
             raise RuntimeError("Simulated failure")
         return MockAccountUsage()
 
