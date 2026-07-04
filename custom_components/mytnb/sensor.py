@@ -94,7 +94,8 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: (
-            _last_billed_month(data["usage"].by_month).usage_kwh
+            (m := _last_billed_month(data["usage"].by_month))
+            and m.usage_kwh
             if data["usage"].by_month and data["usage"].by_month.months
             else None
         ),
@@ -107,7 +108,8 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         native_unit_of_measurement=CURRENCY_RM,
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: (
-            _last_billed_month(data["usage"].by_month).amount_rm
+            (m := _last_billed_month(data["usage"].by_month))
+            and m.amount_rm
             if data["usage"].by_month and data["usage"].by_month.months
             else None
         ),
@@ -307,7 +309,7 @@ def _build_attribute(key: str, data: dict[str, Any]) -> Any:
         if not (usage and usage.by_month and usage.by_month.months):
             return None
         month = _last_billed_month(usage.by_month)
-        if not month.tariff_blocks:
+        if month is None or not month.tariff_blocks:
             return None
         return [
             {

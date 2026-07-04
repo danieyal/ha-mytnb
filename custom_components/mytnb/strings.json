@@ -56,11 +56,11 @@
       "projected_cost": {
         "name": "Projected cost"
       },
-      "monthly_usage": {
-        "name": "Monthly usage"
+      "last_month_usage": {
+        "name": "Last month usage"
       },
-      "monthly_cost": {
-        "name": "Monthly cost"
+      "last_month_cost": {
+        "name": "Last month cost"
       },
       "due_amount": {
         "name": "Amount due"
