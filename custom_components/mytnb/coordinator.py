@@ -195,12 +195,13 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         library derive ``is_owner`` and ``account_type`` automatically.
         """
         account = account_lookup.get(account_number)
+        account_ref = account or account_number
 
         usage, bill_history, payment_history, due = await asyncio.gather(
-            client.get_account_usage_smart(account or account_number),
-            client.get_bill_history(account or account_number),
-            client.get_payment_history(account or account_number),
-            client.get_account_due_amount(account or account_number),
+            client.get_account_usage_smart(account_ref),
+            client.get_bill_history(account_ref),
+            client.get_payment_history(account_ref),
+            client.get_account_due_amount(account_ref),
         )
         return {
             "usage": usage,
