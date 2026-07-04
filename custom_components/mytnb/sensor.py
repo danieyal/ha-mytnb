@@ -126,8 +126,8 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         device_class=SensorDeviceClass.MONETARY,
         native_unit_of_measurement=CURRENCY_RM,
         value_fn=lambda data: (
-            _first_payment(data["payment_history"]).amount
-            if data["payment_history"]
+            payment.amount
+            if (payment := _first_payment(data.get("payment_history", [])))
             else None
         ),
         attr_keys=(ATTR_BILL_HISTORY,),
@@ -137,8 +137,8 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         translation_key="last_payment_date",
         device_class=SensorDeviceClass.DATE,
         value_fn=lambda data: (
-            _first_payment(data["payment_history"]).date
-            if data["payment_history"]
+            payment.date
+            if (payment := _first_payment(data.get("payment_history", [])))
             else None
         ),
     ),
@@ -146,11 +146,11 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
 
 
 def _first_payment(payment_history: list) -> Any:
-    """Return the first (most recent) payment entry, or the first entry overall."""
+    """Return the first (most recent) payment entry, or None if no payments."""
     for entry in payment_history:
         if getattr(entry, "is_payment", False):
             return entry
-    return payment_history[0] if payment_history else None
+    return None
 
 
 async def async_setup_entry(

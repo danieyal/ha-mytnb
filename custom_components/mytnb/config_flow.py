@@ -43,10 +43,10 @@ DATA_SCHEMA = vol.Schema(
 
 async def _validate_login(
     email: str, password: str
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Validate login credentials and return discovered accounts.
 
-    Returns a list of dicts with account_number and owner_name.
+    Returns a list of dicts with account_number, owner_name, and is_owned.
     """
     client = await mytnb.MyTNBClient.login(email, password)
     accounts = await client.get_customer_accounts()
