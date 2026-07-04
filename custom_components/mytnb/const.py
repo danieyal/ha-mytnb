@@ -8,6 +8,7 @@ CONF_PASSWORD = "password"
 CONF_ACCOUNTS = "accounts"
 CONF_ACCOUNT_NUMBER = "account_number"
 CONF_OWNER_NAME = "owner_name"
+CONF_IS_OWNED = "is_owned"
 
 DEFAULT_POLL_INTERVAL = timedelta(hours=1)
 

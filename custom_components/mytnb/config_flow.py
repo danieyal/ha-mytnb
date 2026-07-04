@@ -23,7 +23,7 @@ from mytnb.exceptions import (
     MyTNBError,
 )
 
-from .const import CONF_ACCOUNT_NUMBER, CONF_ACCOUNTS, CONF_OWNER_NAME, DOMAIN
+from .const import CONF_ACCOUNT_NUMBER, CONF_ACCOUNTS, CONF_IS_OWNED, CONF_OWNER_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ async def _validate_login(
         {
             CONF_ACCOUNT_NUMBER: acc.account_number,
             CONF_OWNER_NAME: acc.owner_name,
+            CONF_IS_OWNED: acc.is_owned_bool,
         }
         for acc in accounts
     ]

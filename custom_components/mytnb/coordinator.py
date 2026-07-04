@@ -190,20 +190,22 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
     ) -> dict:
         """Fetch usage, bill history, payment history, due amount, and account metadata.
 
-        The python-mytnb client already returns typed models
-        (``list[BillHistoryEntry]`` / ``PaymentHistoryEntry`` /
-        ``AccountDueAmount``), so no normalization is needed here.
+        The python-mytnb client already returns typed models, so no
+        normalization is needed here. Passing a ``CustomerAccount`` lets the
+        library derive ``is_owner`` and ``account_type`` automatically.
         """
+        account = account_lookup.get(account_number)
+
         usage, bill_history, payment_history, due = await asyncio.gather(
-            client.get_account_usage_smart(account_number),
-            client.get_bill_history(account_number),
-            client.get_payment_history(account_number),
-            client.get_account_due_amount(account_number),
+            client.get_account_usage_smart(account or account_number),
+            client.get_bill_history(account or account_number),
+            client.get_payment_history(account or account_number),
+            client.get_account_due_amount(account or account_number),
         )
         return {
             "usage": usage,
             "bill_history": bill_history,
             "payment_history": payment_history,
             "due": due,
-            "account": account_lookup.get(account_number),
+            "account": account,
         }
