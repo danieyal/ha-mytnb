@@ -104,6 +104,7 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 "account": result["account"],
                 "usage": result["usage"],
                 "bill_history": result["bill_history"],
+                "payment_history": result["payment_history"],
                 "due": result["due"],
             }
             await self._backfill_statistics(
@@ -187,20 +188,22 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         account_number: str,
         account_lookup: dict[str, Any],
     ) -> dict:
-        """Fetch usage, bill history, due amount, and account metadata.
+        """Fetch usage, bill history, payment history, due amount, and account metadata.
 
         The python-mytnb client already returns typed models
-        (``list[BillHistoryEntry]`` / ``AccountDueAmount``), so no normalization
-        is needed here.
+        (``list[BillHistoryEntry]`` / ``PaymentHistoryEntry`` /
+        ``AccountDueAmount``), so no normalization is needed here.
         """
-        usage, bill_history, due = await asyncio.gather(
+        usage, bill_history, payment_history, due = await asyncio.gather(
             client.get_account_usage_smart(account_number),
             client.get_bill_history(account_number),
+            client.get_payment_history(account_number),
             client.get_account_due_amount(account_number),
         )
         return {
             "usage": usage,
             "bill_history": bill_history,
+            "payment_history": payment_history,
             "due": due,
             "account": account_lookup.get(account_number),
         }
