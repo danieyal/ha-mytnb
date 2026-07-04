@@ -136,7 +136,6 @@ class MockCustomerAccount:
     owner_name: str = "Test Owner"
     account_st_address: str = "123 Test St, Kuala Lumpur"
     is_smart_meter: bool = True
-    is_owned_bool: bool = True
 
     @property
     def address(self) -> str:
