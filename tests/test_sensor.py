@@ -205,7 +205,7 @@ async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:
     assert ATTR_BILL_HISTORY not in attrs
     assert ATTR_TARIFF_BLOCKS not in attrs
 
-    # Tariff blocks live on the monthly_usage sensor.
+    # Tariff blocks live on the last_month_usage sensor.
     monthly_sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[4], "220123456789")
     monthly_attrs = monthly_sensor.extra_state_attributes
     assert len(monthly_attrs[ATTR_TARIFF_BLOCKS]) == 1
