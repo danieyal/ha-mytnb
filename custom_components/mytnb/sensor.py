@@ -170,6 +170,7 @@ def _last_billed_month(by_month: Any) -> Any | None:
 
 
 async def async_setup_entry(
+    hass: HomeAssistant,
     entry: MyTNBConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
