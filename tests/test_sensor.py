@@ -184,7 +184,7 @@ async def test_sensor_has_entity_name_and_device(hass: HomeAssistant) -> None:
     assert sensor.has_entity_name is True
     assert sensor.translation_key == "projected_cost"
     assert (DOMAIN, "220123456789") in sensor.device_info["identifiers"]
-    assert sensor.device_info["name"] == "Test Owner"
+    assert sensor.device_info["name"] == "myTNB 220123456789"
 
 
 async def test_sensor_extra_attributes(hass: HomeAssistant) -> None:

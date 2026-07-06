@@ -218,7 +218,7 @@ class MyTNBSensor(CoordinatorEntity[MyTNBDataUpdateCoordinator], SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_{account_number}_{description.key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, account_number)},
-            name=owner_name or f"myTNB {account_number}",
+            name=f"myTNB {account_number}",
             manufacturer=MANUFACTURER,
             model=MODEL,
         )
