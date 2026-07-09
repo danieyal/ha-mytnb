@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -13,10 +14,20 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 import mytnb
 from mytnb.exceptions import APIError, AuthenticationError, MyTNBError
 
-from .const import CONF_ACCOUNT_NUMBER, DEFAULT_POLL_INTERVAL, DOMAIN
+from .const import (
+    CONF_ACCOUNT_NUMBER,
+    DEFAULT_POLL_INTERVAL,
+    DEFAULT_RETRY_ATTEMPTS,
+    DEFAULT_RETRY_BACKOFF_FACTOR,
+    DEFAULT_RETRY_BASE_DELAY,
+    DOMAIN,
+)
+from .retry import with_retry
 from .statistics import async_import_daily_statistics
 
 _LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
@@ -47,6 +58,12 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         self._password = password
         self._accounts = accounts
         self._client: mytnb.MyTNBClient | None = None
+        # Retry/backoff tuning (mirrors python-mytnb's internal cadence so a
+        # transient failure that slips past the library's per-request retries
+        # gets a bounded second chance within the same poll cycle).
+        self._retry_attempts = DEFAULT_RETRY_ATTEMPTS
+        self._retry_base_delay = DEFAULT_RETRY_BASE_DELAY
+        self._retry_backoff_factor = DEFAULT_RETRY_BACKOFF_FACTOR
 
     @property
     def account_numbers(self) -> list[str]:
@@ -121,6 +138,16 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         # Only keep accounts that are still configured.
         return {acc_no: data[acc_no] for acc_no in account_numbers if acc_no in data}
 
+    async def _retry(self, send: Callable[[], Awaitable[T]]) -> T:
+        """Wrap ``send`` with the coordinator's retry/backoff policy."""
+        return await with_retry(
+            send,
+            attempts=self._retry_attempts,
+            base_delay=self._retry_base_delay,
+            backoff_factor=self._retry_backoff_factor,
+            logger=_LOGGER,
+        )
+
     async def _discover_accounts(self) -> list[Any]:
         """Discover linked accounts, logging in / re-logging in as needed.
 
@@ -129,14 +156,14 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         """
         client = await self._get_client()
         try:
-            return await client.get_customer_accounts()
+            return await self._retry(client.get_customer_accounts)
         except AuthenticationError:
             _LOGGER.debug("Session expired, re-logging in")
             try:
                 self._client = await mytnb.MyTNBClient.login(
                     self._email, self._password
                 )
-                return await self._client.get_customer_accounts()
+                return await self._retry(self._client.get_customer_accounts)
             except AuthenticationError as err:
                 raise ConfigEntryAuthFailed(
                     f"Authentication failed for {self._email}"
@@ -192,21 +219,28 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
 
         The python-mytnb client already returns typed models, so no
         normalization is needed here. Passing a ``CustomerAccount`` lets the
-        library derive ``is_owner`` and ``account_type`` automatically.
+        library derive ``is_owner`` and ``account_type`` automatically. The
+        four read calls run concurrently and share a single retry envelope so
+        a transient blip (which per-request retries inside the library didn't catch,
+        or which slipped through) gets one more bounded attempt with backoff rather
+        than failing the whole account.
         """
         account = account_lookup.get(account_number)
         account_ref = account or account_number
 
-        usage, bill_history, payment_history, due = await asyncio.gather(
-            client.get_account_usage_smart(account_ref),
-            client.get_bill_history(account_ref),
-            client.get_payment_history(account_ref),
-            client.get_account_due_amount(account_ref),
-        )
-        return {
-            "usage": usage,
-            "bill_history": bill_history,
-            "payment_history": payment_history,
-            "due": due,
-            "account": account,
-        }
+        async def _fetch_all() -> dict:
+            usage, bill_history, payment_history, due = await asyncio.gather(
+                client.get_account_usage_smart(account_ref),
+                client.get_bill_history(account_ref),
+                client.get_payment_history(account_ref),
+                client.get_account_due_amount(account_ref),
+            )
+            return {
+                "usage": usage,
+                "bill_history": bill_history,
+                "payment_history": payment_history,
+                "due": due,
+                "account": account,
+            }
+
+        return await self._retry(_fetch_all)

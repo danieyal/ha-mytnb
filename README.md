@@ -10,6 +10,10 @@ A Home Assistant custom integration for [myTNB](https://www.mytnb.com.my). Monit
 - **Bill history**: last payment date/amount, outstanding balance
 - **Smart meter support**: SMR status per account
 - **Rich attributes**: daily breakdown, tariff blocks, full bill history
+- **Retry with backoff**: transient API failures are retried with exponential
+  backoff + jitter at both the per-request level (in [python-mytnb](https://github.com/danieyal/python-mytnb))
+  and the per-cycle level (in this integration), so a WAF blip doesn't surface
+  as an unavailable entity
 
 ## Installation
 

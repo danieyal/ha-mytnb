@@ -3,6 +3,14 @@ from datetime import timedelta
 DOMAIN = "mytnb"
 PLATFORMS = ["sensor"]
 
+# Retry/backoff defaults for the integration's high-level API operations.
+# These mirror python-mytnb's internal transport retry so that transient
+# failures which slip past the library's per-request retries get a bounded
+# second chance with the same exponential-with-jitter cadence.
+DEFAULT_RETRY_ATTEMPTS = 3
+DEFAULT_RETRY_BASE_DELAY = 0.5  # seconds
+DEFAULT_RETRY_BACKOFF_FACTOR = 2  # delay grows as base_delay * factor**attempt
+
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
 CONF_ACCOUNTS = "accounts"
