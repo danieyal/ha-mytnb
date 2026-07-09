@@ -303,3 +303,115 @@ async def test_coordinator_account_numbers_property(
     coordinator = _make_coordinator(hass, accounts=accounts)
 
     assert coordinator.account_numbers == ["111", "222"]
+
+
+# ── retry/backoff behavior at the coordinator layer ────────────────────────
+
+
+async def test_coordinator_retries_transient_account_fetch_failure(
+    hass: HomeAssistant,
+) -> None:
+    """A transient retryable error in the per-account fetch is retried.
+
+    The integration's retry layer (mirroring python-mytnb's per-request retry)
+    should give the per-account gather a bounded second chance with backoff
+    rather than immediately failing the account. Backoff sleeps are stubbed so
+    the test stays fast.
+    """
+    from mytnb.exceptions import APIError
+
+    mock_client = create_mock_client()
+
+    # The four per-account calls run concurrently in asyncio.gather; fail the
+    # usage fetch once with a retryable APIError, then succeed.
+    usage_calls = 0
+
+    async def flaky_usage(acc_no):  # noqa: ANN001 - matches the client signature
+        nonlocal usage_calls
+        usage_calls += 1
+        if usage_calls == 1:
+            raise APIError("transient blip", retryable=True)
+        return MockAccountUsage()
+
+    mock_client.get_account_usage_smart = flaky_usage
+
+    coordinator = _make_coordinator(hass)
+
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    with patch("custom_components.mytnb.retry.asyncio.sleep", _no_sleep):
+        mock_client.get_customer_accounts = AsyncMock(
+            return_value=[MockCustomerAccount()]
+        )
+        coordinator._client = mock_client
+        data = await coordinator._async_update_data()
+
+    # The retry recovered the account instead of dropping it; usage was
+    # attempted more than once (the first attempt's transient failure retried).
+    assert usage_calls == 2
+    assert "220123456789" in data
+    assert data["220123456789"]["usage"] is not None
+
+
+async def test_coordinator_retries_transient_discovery_failure(
+    hass: HomeAssistant,
+) -> None:
+    """A transient retryable error during account discovery is retried."""
+    from mytnb.exceptions import APIError
+
+    mock_client = create_mock_client()
+    discover_calls = 0
+
+    async def flaky_discover():
+        nonlocal discover_calls
+        discover_calls += 1
+        if discover_calls == 1:
+            raise APIError("transient blip", retryable=True)
+        return [MockCustomerAccount()]
+
+    mock_client.get_customer_accounts = flaky_discover
+
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    with patch("custom_components.mytnb.retry.asyncio.sleep", _no_sleep):
+        data = await coordinator._async_update_data()
+
+    assert discover_calls == 2  # retried once after the transient blip
+    assert "220123456789" in data
+
+
+async def test_coordinator_non_retryable_api_error_is_not_retried(
+    hass: HomeAssistant,
+) -> None:
+    """A non-retryable APIError surfaces immediately without consuming retries.
+
+    Discovery raising a plain (non-retryable) APIError must behave exactly as
+    before the retry layer was added: it propagates to UpdateFailed without
+    any backoff sleeps.
+    """
+    from mytnb.exceptions import APIError
+
+    mock_client = create_mock_client()
+    mock_client.get_customer_accounts = AsyncMock(
+        side_effect=APIError("permanent")
+    )
+
+    coordinator = _make_coordinator(hass)
+    coordinator._get_client = AsyncMock(return_value=mock_client)
+
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    with (
+        patch("custom_components.mytnb.retry.asyncio.sleep", _no_sleep),
+        pytest.raises(UpdateFailed),
+    ):
+        await coordinator._async_update_data()
+
+    # The error is permanent, so discovery was attempted only once.
+    assert mock_client.get_customer_accounts.await_count == 1
