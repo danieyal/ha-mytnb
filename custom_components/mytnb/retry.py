@@ -6,7 +6,7 @@ errors). This helper adds a second, higher-level retry around the
 coordinator's operations (account discovery, per-account data fetch) so that
 a transient failure which slipped past the library's per-request retries gets
 a bounded second chance with the same exponential-with-jitter cadence, rather
-than immediately marking the entity unavailable or forcing a full cycle to
+than immediately marking the entity unavailable or forcing a full cycle until
 the next poll interval.
 
 Non-retryable errors — authentication failures, rate limiting, geo-blocks,

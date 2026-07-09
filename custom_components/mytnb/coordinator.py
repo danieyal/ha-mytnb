@@ -221,9 +221,9 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         normalization is needed here. Passing a ``CustomerAccount`` lets the
         library derive ``is_owner`` and ``account_type`` automatically. The
         four read calls run concurrently and share a single retry envelope so
-        a transient blip (which already retrying per-request inside the
-        library succeeded past, or which slipped through) gets one more
-        bounded attempt with backoff rather than failing the whole account.
+        a transient blip (which per-request retries inside the library didn't catch,
+        or which slipped through) gets one more bounded attempt with backoff rather
+        than failing the whole account.
         """
         account = account_lookup.get(account_number)
         account_ref = account or account_number
