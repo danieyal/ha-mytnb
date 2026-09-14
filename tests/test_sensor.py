@@ -14,6 +14,7 @@ from custom_components.mytnb.const import (
     ATTR_DAILY_USAGE,
     ATTR_DUE_DATE,
     ATTR_IS_SMART_METER,
+    ATTR_METER_READINGS,
     ATTR_OWNER_NAME,
     ATTR_PAYMENT_HISTORY,
     ATTR_TARIFF_BLOCKS,
@@ -311,9 +312,79 @@ async def test_sensor_extra_attributes_none_when_no_data(
     assert sensor.extra_state_attributes is None
 
 
+async def test_meter_reading_native_value(hass: HomeAssistant) -> None:
+    """The meter_reading sensor reports the kWh register's current reading."""
+    data = create_mock_account_data()
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(
+        coordinator,
+        SENSOR_DESCRIPTIONS[9],  # meter_reading
+        "220123456789",
+    )
+    assert sensor.native_value == 10319.0
+
+
+async def test_current_meter_reading_native_value(hass: HomeAssistant) -> None:
+    """The extrapolated sensor adds current-cycle usage to the billed register."""
+    data = create_mock_account_data()
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(
+        coordinator,
+        SENSOR_DESCRIPTIONS[10],  # current_meter_reading
+        "220123456789",
+    )
+    assert sensor.native_value == 10439.0
+
+    data["220123456789"]["usage"].current_usage_kwh = 350.0
+    assert sensor.native_value == 10669.0
+
+
+async def test_current_meter_reading_requires_usage(hass: HomeAssistant) -> None:
+    """The extrapolated reading is unavailable without current-cycle usage."""
+    data = create_mock_account_data()
+    data["220123456789"]["usage"].current_usage_kwh = None
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[10], "220123456789")
+    assert sensor.native_value is None
+
+
+async def test_meter_reading_native_value_no_readings(hass: HomeAssistant) -> None:
+    """No meter readings (e.g. bill PDF unavailable) degrades to None."""
+    data = create_mock_account_data()
+    data["220123456789"]["meter_readings"] = []
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[9], "220123456789")
+    assert sensor.native_value is None
+
+
+async def test_meter_reading_attributes(hass: HomeAssistant) -> None:
+    """All meter registers (kWh/kW/kVARh) are exposed as an attribute list."""
+    from tests.conftest import MockMeterRegisterReading
+
+    data = create_mock_account_data()
+    data["220123456789"]["meter_readings"] = [
+        MockMeterRegisterReading(),
+        MockMeterRegisterReading(
+            previous_reading=76.0, current_reading=81.0, usage=5.0, unit="kW"
+        ),
+    ]
+    coordinator = make_coordinator_mock(data)
+
+    sensor = MyTNBSensor(coordinator, SENSOR_DESCRIPTIONS[9], "220123456789")
+    attrs = sensor.extra_state_attributes
+    assert len(attrs[ATTR_METER_READINGS]) == 2
+    assert attrs[ATTR_METER_READINGS][0]["unit"] == "kWh"
+    assert attrs[ATTR_METER_READINGS][0]["current_reading"] == 10319.0
+    assert attrs[ATTR_METER_READINGS][1]["unit"] == "kW"
+
+
 async def test_sensor_descriptions_count() -> None:
     """Test we have the expected number of sensor descriptions."""
-    assert len(SENSOR_DESCRIPTIONS) == 9
+    assert len(SENSOR_DESCRIPTIONS) == 11
 
 
 async def test_sensor_state_classes() -> None:
@@ -343,7 +414,7 @@ async def test_setup_entry_creates_sensors(hass: HomeAssistant) -> None:
         hass, entry, lambda e: _add_entities(e, added_entities)
     )
 
-    assert len(added_entities) == 9
+    assert len(added_entities) == 11
     assert all(isinstance(e, MyTNBSensor) for e in added_entities)
 
 
@@ -363,7 +434,7 @@ async def test_setup_entry_no_data(hass: HomeAssistant) -> None:
         hass, entry, lambda e: _add_entities(e, added_entities)
     )
 
-    assert len(added_entities) == 9
+    assert len(added_entities) == 11
     assert all(e.available is False for e in added_entities)
 
 
@@ -406,8 +477,8 @@ async def test_setup_entry_multiple_accounts(hass: HomeAssistant) -> None:
         hass, entry, lambda e: _add_entities(e, added_entities)
     )
 
-    # 2 accounts × 9 sensors = 18
-    assert len(added_entities) == 18
+    # 2 accounts × 11 sensors = 22
+    assert len(added_entities) == 22
     account_numbers = {e.account_number for e in added_entities}
     assert account_numbers == {"111", "333"}
 

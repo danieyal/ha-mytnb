@@ -29,7 +29,6 @@ _BASE_ENTRY = {
     "source": "user",
     "discovery_keys": {},
     "unique_id": None,
-    "subentries_data": (),
 }
 
 _BASE_ENTRY_DATA = {
@@ -136,7 +135,6 @@ async def test_migrate_entry_v1_to_v2(hass: HomeAssistant) -> None:
         discovery_keys={},
         unique_id=None,
         entry_id="test_migrate",
-        subentries_data=(),
     )
     # Register the entry so async_update_entry works
     hass.config_entries._entries[v1_entry.entry_id] = v1_entry
@@ -174,7 +172,6 @@ async def test_migrate_entry_v1_failed(hass: HomeAssistant) -> None:
         discovery_keys={},
         unique_id=None,
         entry_id="test",
-        subentries_data=(),
     )
 
     with patch(
@@ -200,7 +197,6 @@ async def test_migrate_entry_unknown(hass: HomeAssistant) -> None:
         discovery_keys={},
         unique_id=None,
         entry_id="test",
-        subentries_data=(),
     )
     entry = ConfigEntry(**entry_kwargs)
     result = await async_migrate_entry(hass, entry)

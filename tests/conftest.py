@@ -130,6 +130,16 @@ def _bill_history(
 
 
 @dataclass
+class MockMeterRegisterReading:
+    """Matches custom_components.mytnb.meter_reading.MeterRegisterReading."""
+    meter_number: str = "SIE1052308047669"
+    previous_reading: float = 9750.0
+    current_reading: float = 10319.0
+    usage: float = 569.0
+    unit: str = "kWh"
+
+
+@dataclass
 class MockCustomerAccount:
     """Matches mytnb.models.CustomerAccount."""
     account_number: str = "220123456789"
@@ -160,6 +170,7 @@ def create_mock_account_data(
             "bill_history": _bill_history(),
             "payment_history": [],
             "due": _due_amount(),
+            "meter_readings": [MockMeterRegisterReading()],
         }
     }
 
@@ -185,6 +196,11 @@ def create_mock_client() -> MagicMock:
     client.get_account_due_amount = AsyncMock(
         return_value=_due_amount(),
     )
+    # Meter readings come from a raw legacy-transport call (GetBillMaskingPDFV2),
+    # not a typed client method. Default to "no PDF available" so coordinator
+    # tests that don't care about meter readings don't need to stub this.
+    client._legacy_transport = MagicMock()
+    client._legacy_transport.post = AsyncMock(return_value={"binaryBill": None})
     client.close = AsyncMock()
     return client
 

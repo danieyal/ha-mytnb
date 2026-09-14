@@ -28,6 +28,7 @@ from .const import (
     ATTR_DAILY_USAGE,
     ATTR_DUE_DATE,
     ATTR_IS_SMART_METER,
+    ATTR_METER_READINGS,
     ATTR_OWNER_NAME,
     ATTR_PAYMENT_HISTORY,
     ATTR_TARIFF_BLOCKS,
@@ -145,6 +146,28 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
             else None
         ),
     ),
+    MyTNBSensorEntityDescription(
+        key="meter_reading",
+        translation_key="meter_reading",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: (
+            reading.current_reading
+            if (reading := _kwh_meter_reading(data.get("meter_readings", [])))
+            else None
+        ),
+        attr_keys=(ATTR_METER_READINGS,),
+    ),
+    MyTNBSensorEntityDescription(
+        key="current_meter_reading",
+        translation_key="current_meter_reading",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: _current_meter_reading(data),
+        attr_keys=(ATTR_METER_READINGS,),
+    ),
 ]
 
 
@@ -154,6 +177,28 @@ def _first_payment(payment_history: list[Any]) -> Any | None:
         if getattr(entry, "is_payment", False):
             return entry
     return None
+
+
+def _kwh_meter_reading(meter_readings: list[Any]) -> Any | None:
+    """Return the kWh register reading, the one meaningful as a single state.
+
+    A bill can have multiple registers (kWh/kW/kVARh); kWh is the one that
+    matches the account's energy usage and unit, so it's the sensor's state.
+    The full set of registers is still exposed via ATTR_METER_READINGS.
+    """
+    for reading in meter_readings:
+        if reading.unit == "kWh":
+            return reading
+    return None
+
+
+def _current_meter_reading(data: dict[str, Any]) -> float | None:
+    """Estimate the live cumulative kWh reading from billed baseline + usage."""
+    reading = _kwh_meter_reading(data.get("meter_readings", []))
+    usage = data.get("usage")
+    if reading is None or usage is None or usage.current_usage_kwh is None:
+        return None
+    return reading.current_reading + usage.current_usage_kwh
 
 
 def _last_billed_month(by_month: Any) -> Any | None:
@@ -319,6 +364,21 @@ def _build_attribute(key: str, data: dict[str, Any]) -> Any:
                 "cost": block.amount,
             }
             for block in month.tariff_blocks
+        ]
+
+    if key == ATTR_METER_READINGS:
+        meter_readings = data.get("meter_readings") or []
+        if not meter_readings:
+            return None
+        return [
+            {
+                "meter_number": r.meter_number,
+                "previous_reading": r.previous_reading,
+                "current_reading": r.current_reading,
+                "usage": r.usage,
+                "unit": r.unit,
+            }
+            for r in meter_readings
         ]
 
     if key == ATTR_DAILY_USAGE:

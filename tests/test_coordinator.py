@@ -159,6 +159,37 @@ async def test_coordinator_auth_failure_raises_config_entry_auth_failed(
         mytnb.MyTNBClient.login = original
 
 
+async def test_coordinator_caches_meter_readings_until_new_bill(
+    hass: HomeAssistant,
+) -> None:
+    """The bill PDF is fetched once per billing number, not every hourly poll."""
+    from custom_components.mytnb.meter_reading import MeterRegisterReading
+
+    mock_client = create_mock_client()
+    readings = [
+        MeterRegisterReading(
+            meter_number="SIE1052308047669",
+            previous_reading=9750.0,
+            current_reading=10319.0,
+            usage=569.0,
+            unit="kWh",
+        )
+    ]
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+
+    with patch(
+        "custom_components.mytnb.coordinator.fetch_meter_readings",
+        new=AsyncMock(return_value=readings),
+    ) as fetch_meter_readings:
+        first = await coordinator._async_update_data()
+        coordinator.data = first
+        second = await coordinator._async_update_data()
+
+    assert fetch_meter_readings.await_count == 1
+    assert second["220123456789"]["meter_readings"] == readings
+
+
 async def test_coordinator_total_failure_raises_update_failed(
     hass: HomeAssistant,
 ) -> None:

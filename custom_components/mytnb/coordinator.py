@@ -22,6 +22,7 @@ from .const import (
     DEFAULT_RETRY_BASE_DELAY,
     DOMAIN,
 )
+from .meter_reading import MeterRegisterReading, fetch_meter_readings
 from .retry import with_retry
 from .statistics import async_import_daily_statistics
 
@@ -64,6 +65,13 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         self._retry_attempts = DEFAULT_RETRY_ATTEMPTS
         self._retry_base_delay = DEFAULT_RETRY_BASE_DELAY
         self._retry_backoff_factor = DEFAULT_RETRY_BACKOFF_FACTOR
+        # Meter readings only change when a new bill is issued (roughly
+        # monthly), unlike everything else fetched every poll cycle. Cache by
+        # account so we only re-fetch+parse the bill PDF when its billing_no
+        # changes, keyed as {account_number: (billing_no, readings)}.
+        self._meter_reading_cache: dict[
+            str, tuple[str, list[MeterRegisterReading]]
+        ] = {}
 
     @property
     def account_numbers(self) -> list[str]:
@@ -123,6 +131,7 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 "bill_history": result["bill_history"],
                 "payment_history": result["payment_history"],
                 "due": result["due"],
+                "meter_readings": result["meter_readings"],
             }
             await self._backfill_statistics(
                 acc_no, result["account"], result["usage"]
@@ -243,4 +252,46 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 "account": account,
             }
 
-        return await self._retry(_fetch_all)
+        result = await self._retry(_fetch_all)
+        result["meter_readings"] = await self._get_meter_readings(
+            client, account_number, account, result["bill_history"]
+        )
+        return result
+
+    async def _get_meter_readings(
+        self,
+        client: mytnb.MyTNBClient,
+        account_number: str,
+        account: Any,
+        bill_history: list[Any],
+    ) -> list[MeterRegisterReading]:
+        """Return cached meter readings, fetching a new bill PDF only if needed.
+
+        A new bill (and thus new register readings) only appears roughly once
+        a month, so this skips the PDF fetch+parse entirely unless the latest
+        ``billing_no`` differs from what's cached. Any failure here (missing
+        bill history, PDF fetch error, parse error) degrades to an empty list
+        rather than failing the whole account fetch — this is bonus data.
+        """
+        if account is None or not bill_history:
+            return self._meter_reading_cache.get(account_number, ("", []))[1]
+
+        latest_billing_no = bill_history[0].billing_no
+        cached = self._meter_reading_cache.get(account_number)
+        if cached and cached[0] == latest_billing_no:
+            return cached[1]
+
+        try:
+            readings = await self._retry(
+                lambda: fetch_meter_readings(client, account, latest_billing_no)
+            )
+        except Exception as err:  # noqa: BLE001 - best-effort bonus data
+            _LOGGER.warning(
+                "Failed fetching meter readings for account %s: %s",
+                account_number,
+                err,
+            )
+            return cached[1] if cached else []
+
+        self._meter_reading_cache[account_number] = (latest_billing_no, readings)
+        return readings
