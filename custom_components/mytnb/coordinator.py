@@ -64,6 +64,9 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         self._retry_attempts = DEFAULT_RETRY_ATTEMPTS
         self._retry_base_delay = DEFAULT_RETRY_BASE_DELAY
         self._retry_backoff_factor = DEFAULT_RETRY_BACKOFF_FACTOR
+        # Meter readings come from the bill PDF and only change with a new
+        # bill, so keep them per account with the bill they were read from.
+        self._meter_readings: dict[str, tuple[Any, list[Any]]] = {}
 
     @property
     def account_numbers(self) -> list[str]:
@@ -123,6 +126,8 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 "bill_history": result["bill_history"],
                 "payment_history": result["payment_history"],
                 "due": result["due"],
+                "meter_readings": result["meter_readings"],
+                "meter_readings_bill": result["meter_readings_bill"],
             }
             await self._backfill_statistics(
                 acc_no, result["account"], result["usage"]
@@ -243,4 +248,51 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
                 "account": account,
             }
 
-        return await self._retry(_fetch_all)
+        result = await self._retry(_fetch_all)
+        bill, readings = await self._get_meter_readings(
+            client, account_number, account_ref, result["bill_history"]
+        )
+        result["meter_readings"] = readings
+        result["meter_readings_bill"] = bill
+        return result
+
+    async def _get_meter_readings(
+        self,
+        client: mytnb.MyTNBClient,
+        account_number: str,
+        account_ref: Any,
+        bill_history: list[Any],
+    ) -> tuple[Any, list[Any]]:
+        """Return ``(bill, readings)`` for the latest bill.
+
+        The bill PDF is only downloaded when a new bill appears. Failures keep
+        the previous readings: they are extras that must not fail the account.
+        """
+        cached = self._meter_readings.get(account_number, (None, []))
+        latest = next((bill for bill in bill_history if bill.billing_no), None)
+        if latest is None or (
+            cached[0] is not None and cached[0].billing_no == latest.billing_no
+        ):
+            return cached
+
+        try:
+            readings = await self._retry(
+                lambda: client.get_meter_readings(account_ref, latest.billing_no)
+            )
+        except Exception as err:  # noqa: BLE001 - best effort, see docstring
+            _LOGGER.warning(
+                "Failed reading meter readings from bill %s of account %s: %s",
+                latest.billing_no,
+                account_number,
+                err,
+            )
+            return cached
+
+        if not readings:
+            _LOGGER.warning(
+                "Bill %s of account %s has no meter readings this version can read",
+                latest.billing_no,
+                account_number,
+            )
+        self._meter_readings[account_number] = (latest, readings)
+        return latest, readings

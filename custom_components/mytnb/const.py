@@ -20,6 +20,20 @@ CONF_IS_OWNED = "is_owned"
 
 DEFAULT_POLL_INTERVAL = timedelta(hours=1)
 
+# Money is reported with its ISO 4217 code. myTNB itself says "RM", which is
+# what versions before 1.5.0 used; the config entry migration relabels stored
+# statistics from LEGACY_CURRENCY to CURRENCY.
+CURRENCY = "MYR"
+LEGACY_CURRENCY = "RM"
+# Keys of the sensors whose unit is CURRENCY.
+MONETARY_SENSOR_KEYS = (
+    "current_cost",
+    "projected_cost",
+    "last_month_cost",
+    "due_amount",
+    "last_payment_amount",
+)
+
 MANUFACTURER = "Tenaga Nasional Berhad"
 MODEL = "myTNB Account"
 
@@ -32,3 +46,5 @@ ATTR_BILL_HISTORY = "bill_history"
 ATTR_PAYMENT_HISTORY = "payment_history"
 ATTR_TARIFF_BLOCKS = "tariff_blocks"
 ATTR_DUE_DATE = "due_date"
+ATTR_METER_READINGS = "meter_readings"
+ATTR_BILL_DATE = "bill_date"

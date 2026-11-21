@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mytnb import (
     async_migrate_entry,
@@ -205,3 +206,57 @@ async def test_migrate_entry_unknown(hass: HomeAssistant) -> None:
     entry = ConfigEntry(**entry_kwargs)
     result = await async_migrate_entry(hass, entry)
     assert result is False
+
+
+async def test_migrate_entry_currency_without_recorder(hass: HomeAssistant) -> None:
+    """Without the recorder nothing is relabelled, but the entry still migrates."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, version=2, minor_version=1, data=_BASE_ENTRY_DATA
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.mytnb.async_migrate_currency", AsyncMock()
+    ) as migrate:
+        assert await async_migrate_entry(hass, entry) is True
+
+    migrate.assert_not_awaited()
+    assert entry.minor_version == 2
+
+
+async def test_migrate_entry_currency_failure_still_loads(hass: HomeAssistant) -> None:
+    """A failed relabel is logged, and the entry still migrates."""
+    hass.config.components.add("recorder")
+    entry = MockConfigEntry(
+        domain=DOMAIN, version=2, minor_version=1, data=_BASE_ENTRY_DATA
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.mytnb.async_migrate_currency",
+        AsyncMock(side_effect=RuntimeError("database locked")),
+    ):
+        assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == 2
+
+
+async def test_migrate_entry_v1_also_migrates_currency(hass: HomeAssistant) -> None:
+    """A v1 entry ends up at 2.2 in one migration."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        minor_version=1,
+        data={CONF_EMAIL: "test@example.com", CONF_PASSWORD: "testpassword"},
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.mytnb._validate_login",
+        AsyncMock(
+            return_value=[{CONF_ACCOUNT_NUMBER: "111111111111", CONF_OWNER_NAME: "A"}]
+        ),
+    ):
+        assert await async_migrate_entry(hass, entry) is True
+
+    assert (entry.version, entry.minor_version) == (2, 2)

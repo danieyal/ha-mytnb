@@ -13,26 +13,32 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator
 from datetime import datetime
+from functools import partial
 from typing import Any
 
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
+    async_update_statistics_metadata,
     get_last_statistics,
+    get_metadata,
 )
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import CURRENCY, DOMAIN, LEGACY_CURRENCY
 
 _LOGGER = logging.getLogger(__name__)
 
-CURRENCY_RM = "RM"
-
 # Daily readings are Malaysian local days; anchor buckets to KL midnight.
 _TZ = dt_util.get_time_zone("Asia/Kuala_Lumpur")
+
+
+def daily_statistic_id(account_number: str, suffix: str) -> str:
+    """Return the id of an account's daily ``energy`` or ``cost`` statistic."""
+    return f"{DOMAIN}:{account_number}_daily_{suffix}"
 
 
 def _iter_days(usage: Any) -> Iterator[Any]:
@@ -90,7 +96,7 @@ async def async_import_daily_statistics(
         days,
         suffix="cost",
         name=f"{label} daily cost",
-        unit=CURRENCY_RM,
+        unit=CURRENCY,
         value_fn=lambda day: day.amount_rm,
     )
 
@@ -106,7 +112,7 @@ async def _import_series(
     value_fn: Callable[[Any], float],
 ) -> None:
     """Compute cumulative sums for new days and import them as statistics."""
-    statistic_id = f"{DOMAIN}:{account_number}_daily_{suffix}"
+    statistic_id = daily_statistic_id(account_number, suffix)
 
     last = await get_instance(hass).async_add_executor_job(
         get_last_statistics, hass, 1, statistic_id, True, {"sum"}
@@ -158,3 +164,25 @@ def _as_timestamp(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return value.timestamp()
+
+
+async def async_migrate_currency(hass: HomeAssistant, statistic_ids: set[str]) -> None:
+    """Relabel stored statistics from ``RM`` to ``MYR``.
+
+    Both name the same currency, so the values stay as they are. Without this,
+    the recorder stops compiling statistics for a sensor whose unit changes to
+    one it cannot convert from, and raises a repair until the user fixes it.
+    """
+    metadata = await get_instance(hass).async_add_executor_job(
+        partial(get_metadata, hass, statistic_ids=statistic_ids)
+    )
+    for statistic_id, (_, meta) in metadata.items():
+        if meta["unit_of_measurement"] != LEGACY_CURRENCY:
+            continue
+        async_update_statistics_metadata(
+            hass,
+            statistic_id,
+            new_unit_class=None,
+            new_unit_of_measurement=CURRENCY,
+        )
+        _LOGGER.debug("Relabelled %s statistics from RM to MYR", statistic_id)

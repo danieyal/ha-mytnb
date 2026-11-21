@@ -24,16 +24,19 @@ from . import MyTNBConfigEntry
 from .const import (
     ATTR_ACCOUNT_NUMBER,
     ATTR_ADDRESS,
+    ATTR_BILL_DATE,
     ATTR_BILL_HISTORY,
     ATTR_DAILY_USAGE,
     ATTR_DUE_DATE,
     ATTR_IS_SMART_METER,
+    ATTR_METER_READINGS,
     ATTR_OWNER_NAME,
     ATTR_PAYMENT_HISTORY,
     ATTR_TARIFF_BLOCKS,
     CONF_ACCOUNT_NUMBER,
     CONF_ACCOUNTS,
     CONF_OWNER_NAME,
+    CURRENCY,
     DOMAIN,
     MANUFACTURER,
     MODEL,
@@ -41,8 +44,6 @@ from .const import (
 from .coordinator import MyTNBDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-
-CURRENCY_RM = "RM"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -76,7 +77,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         key="current_cost",
         translation_key="current_cost",
         device_class=SensorDeviceClass.MONETARY,
-        native_unit_of_measurement=CURRENCY_RM,
+        native_unit_of_measurement=CURRENCY,
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: data["usage"].current_cost_rm,
     ),
@@ -84,7 +85,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         key="projected_cost",
         translation_key="projected_cost",
         device_class=SensorDeviceClass.MONETARY,
-        native_unit_of_measurement=CURRENCY_RM,
+        native_unit_of_measurement=CURRENCY,
         value_fn=lambda data: data["usage"].projected_cost_rm,
     ),
     MyTNBSensorEntityDescription(
@@ -105,7 +106,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         key="last_month_cost",
         translation_key="last_month_cost",
         device_class=SensorDeviceClass.MONETARY,
-        native_unit_of_measurement=CURRENCY_RM,
+        native_unit_of_measurement=CURRENCY,
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: (
             (m := _last_billed_month(data["usage"].by_month))
@@ -118,7 +119,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         key="due_amount",
         translation_key="due_amount",
         device_class=SensorDeviceClass.MONETARY,
-        native_unit_of_measurement=CURRENCY_RM,
+        native_unit_of_measurement=CURRENCY,
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: data["due"].amount_due,
         attr_keys=(ATTR_DUE_DATE,),
@@ -127,7 +128,7 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
         key="last_payment_amount",
         translation_key="last_payment_amount",
         device_class=SensorDeviceClass.MONETARY,
-        native_unit_of_measurement=CURRENCY_RM,
+        native_unit_of_measurement=CURRENCY,
         value_fn=lambda data: (
             payment.amount
             if (payment := _first_payment(data.get("payment_history", [])))
@@ -145,7 +146,48 @@ SENSOR_DESCRIPTIONS: list[MyTNBSensorEntityDescription] = [
             else None
         ),
     ),
+    MyTNBSensorEntityDescription(
+        key="meter_reading",
+        translation_key="meter_reading",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: (
+            reading.current_reading if (reading := _kwh_reading(data)) else None
+        ),
+        attr_keys=(ATTR_METER_READINGS, ATTR_BILL_DATE),
+    ),
+    # The billed reading plus this cycle's usage. The two figures update on
+    # their own schedules, so around bill day the sum can briefly count a
+    # month twice or not at all; without a state class it stays out of
+    # long-term statistics and the Energy dashboard.
+    MyTNBSensorEntityDescription(
+        key="estimated_meter_reading",
+        translation_key="estimated_meter_reading",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        entity_registry_enabled_default=False,
+        value_fn=lambda data: _estimated_reading(data),
+        attr_keys=(ATTR_BILL_DATE,),
+    ),
 ]
+
+
+def _kwh_reading(data: dict[str, Any]) -> Any | None:
+    """Return the latest bill's kWh register reading, or None."""
+    for reading in data.get("meter_readings") or []:
+        if reading.unit == "kWh":
+            return reading
+    return None
+
+
+def _estimated_reading(data: dict[str, Any]) -> float | None:
+    """Return the billed kWh reading plus usage since that bill, or None."""
+    reading = _kwh_reading(data)
+    usage = data.get("usage")
+    if reading is None or usage is None or usage.current_usage_kwh is None:
+        return None
+    return round(reading.current_reading + usage.current_usage_kwh, 2)
 
 
 def _first_payment(payment_history: list[Any]) -> Any | None:
@@ -320,6 +362,27 @@ def _build_attribute(key: str, data: dict[str, Any]) -> Any:
             }
             for block in month.tariff_blocks
         ]
+
+    if key == ATTR_METER_READINGS:
+        readings = data.get("meter_readings") or []
+        if not readings:
+            return None
+        return [
+            {
+                "meter_number": r.meter_number,
+                "unit": r.unit,
+                "previous_reading": r.previous_reading,
+                "current_reading": r.current_reading,
+                "usage": r.usage,
+            }
+            for r in readings
+        ]
+
+    if key == ATTR_BILL_DATE:
+        if not data.get("meter_readings"):
+            return None
+        bill = data.get("meter_readings_bill")
+        return bill.date if bill is not None else None
 
     if key == ATTR_DAILY_USAGE:
         if not (usage and usage.by_day):

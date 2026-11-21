@@ -7,7 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from mytnb.models import AccountDueAmount, BillHistoryEntry
+from mytnb.models import AccountDueAmount, BillHistoryEntry, MeterReading
 
 # ── Mock models matching python-mytnb Pydantic shapes ────────────────
 
@@ -126,6 +126,26 @@ def _bill_history(
     ]
 
 
+def _meter_readings() -> list[MeterReading]:
+    """list[MeterReading], as get_meter_readings() returns for a smart meter."""
+    return [
+        MeterReading(
+            meter_number="SIE1052308047669",
+            unit="kWh",
+            previous_reading=9750,
+            current_reading=10319,
+            usage=569,
+        ),
+        MeterReading(
+            meter_number="SIE1052308047669",
+            unit="kW",
+            previous_reading=76,
+            current_reading=81,
+            usage=5,
+        ),
+    ]
+
+
 # ── Mock CustomerAccount ─────────────────────────────────────────────
 
 
@@ -160,6 +180,8 @@ def create_mock_account_data(
             "bill_history": _bill_history(),
             "payment_history": [],
             "due": _due_amount(),
+            "meter_readings": _meter_readings(),
+            "meter_readings_bill": _bill_history()[0],
         }
     }
 
@@ -184,6 +206,9 @@ def create_mock_client() -> MagicMock:
     )
     client.get_account_due_amount = AsyncMock(
         return_value=_due_amount(),
+    )
+    client.get_meter_readings = AsyncMock(
+        return_value=_meter_readings(),
     )
     client.close = AsyncMock()
     return client
