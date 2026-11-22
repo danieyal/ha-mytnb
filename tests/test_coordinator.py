@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from mytnb.models import BillHistoryEntry, MeterReading
 
 from custom_components.mytnb.coordinator import MyTNBDataUpdateCoordinator
 from tests.conftest import (
     MockAccountUsage,
     MockCustomerAccount,
+    _bill_history,
     create_mock_client,
     make_account_dict,
 )
@@ -415,3 +418,111 @@ async def test_coordinator_non_retryable_api_error_is_not_retried(
 
     # The error is permanent, so discovery was attempted only once.
     assert mock_client.get_customer_accounts.await_count == 1
+
+
+async def test_coordinator_reads_meter_readings_once_per_bill(
+    hass: HomeAssistant,
+) -> None:
+    """The bill PDF is only downloaded again when a new bill appears."""
+    mock_client = create_mock_client()
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+
+    first = await coordinator._async_update_data()
+    coordinator.data = first
+    second = await coordinator._async_update_data()
+
+    mock_client.get_meter_readings.assert_awaited_once()
+    account, billing_no = mock_client.get_meter_readings.await_args.args
+    assert account.account_number == "220123456789"
+    assert billing_no == "12345"
+    readings = second["220123456789"]["meter_readings"]
+    assert [r.current_reading for r in readings] == [10319, 81]
+    assert second["220123456789"]["meter_readings_bill"].billing_no == "12345"
+
+    new_bill = BillHistoryEntry(billing_no="12346", amount=90.0)
+    mock_client.get_bill_history.return_value = [new_bill, *_bill_history()]
+    await coordinator._async_update_data()
+
+    assert mock_client.get_meter_readings.await_count == 2
+    assert mock_client.get_meter_readings.await_args.args[1] == "12346"
+
+
+async def test_coordinator_keeps_meter_readings_when_bill_fails(
+    hass: HomeAssistant,
+) -> None:
+    """A failed bill download keeps the previous readings and the account."""
+    mock_client = create_mock_client()
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+    coordinator.data = await coordinator._async_update_data()
+
+    mock_client.get_bill_history.return_value = [
+        BillHistoryEntry(billing_no="12346", amount=90.0)
+    ]
+    mock_client.get_meter_readings.side_effect = RuntimeError("PDF unavailable")
+    data = await coordinator._async_update_data()
+
+    assert data["220123456789"]["usage"] is not None
+    assert data["220123456789"]["meter_readings_bill"].billing_no == "12345"
+    assert [r.current_reading for r in data["220123456789"]["meter_readings"]] == [
+        10319,
+        81,
+    ]
+
+
+async def test_coordinator_meter_readings_without_bills(
+    hass: HomeAssistant,
+) -> None:
+    """An account without bills has no readings and downloads nothing."""
+    mock_client = create_mock_client()
+    mock_client.get_bill_history.return_value = []
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+
+    data = await coordinator._async_update_data()
+
+    mock_client.get_meter_readings.assert_not_awaited()
+    assert data["220123456789"]["meter_readings"] == []
+    assert data["220123456789"]["meter_readings_bill"] is None
+
+
+async def test_coordinator_retries_unread_bill_daily(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A bill without readings keeps the previous ones and is retried daily."""
+    mock_client = create_mock_client()
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+    coordinator.data = await coordinator._async_update_data()
+
+    # A new bill whose PDF isn't available yet (or can't be read).
+    mock_client.get_bill_history.return_value = [
+        BillHistoryEntry(billing_no="12346", amount=90.0)
+    ]
+    mock_client.get_meter_readings.return_value = []
+    data = await coordinator._async_update_data()
+    assert mock_client.get_meter_readings.await_count == 2
+    assert data["220123456789"]["meter_readings_bill"].billing_no == "12345"
+    assert len(data["220123456789"]["meter_readings"]) == 2
+
+    # Hourly polls within the day don't download it again.
+    freezer.tick(timedelta(hours=23))
+    await coordinator._async_update_data()
+    assert mock_client.get_meter_readings.await_count == 2
+
+    # A day later it is tried again, and now has readings.
+    freezer.tick(timedelta(hours=2))
+    mock_client.get_meter_readings.return_value = [
+        MeterReading(
+            meter_number="SIE1052308047669",
+            unit="kWh",
+            previous_reading=10319,
+            current_reading=10800,
+            usage=481,
+        )
+    ]
+    data = await coordinator._async_update_data()
+    assert mock_client.get_meter_readings.await_count == 3
+    assert data["220123456789"]["meter_readings_bill"].billing_no == "12346"
+    assert data["220123456789"]["meter_readings"][0].current_reading == 10800

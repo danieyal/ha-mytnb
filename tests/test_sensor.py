@@ -10,15 +10,18 @@ from homeassistant.core import HomeAssistant
 from custom_components.mytnb.const import (
     ATTR_ACCOUNT_NUMBER,
     ATTR_ADDRESS,
+    ATTR_BILL_DATE,
     ATTR_BILL_HISTORY,
     ATTR_DAILY_USAGE,
     ATTR_DUE_DATE,
     ATTR_IS_SMART_METER,
+    ATTR_METER_READINGS,
     ATTR_OWNER_NAME,
     ATTR_PAYMENT_HISTORY,
     ATTR_TARIFF_BLOCKS,
     CONF_ACCOUNTS,
     DOMAIN,
+    MONETARY_SENSOR_KEYS,
 )
 from custom_components.mytnb.sensor import (
     SENSOR_DESCRIPTIONS,
@@ -313,7 +316,7 @@ async def test_sensor_extra_attributes_none_when_no_data(
 
 async def test_sensor_descriptions_count() -> None:
     """Test we have the expected number of sensor descriptions."""
-    assert len(SENSOR_DESCRIPTIONS) == 9
+    assert len(SENSOR_DESCRIPTIONS) == 11
 
 
 async def test_sensor_state_classes() -> None:
@@ -322,11 +325,12 @@ async def test_sensor_state_classes() -> None:
 
     for desc in SENSOR_DESCRIPTIONS:
         assert desc.key is not None
-        # Monetary and date sensors legitimately have no state class.
+        # Monetary and date sensors legitimately have no state class, and the
+        # estimated meter reading deliberately stays out of statistics.
         if desc.device_class in (
             SensorDeviceClass.MONETARY,
             SensorDeviceClass.DATE,
-        ):
+        ) or desc.key == "estimated_meter_reading":
             continue
         assert desc.state_class is not None
 
@@ -343,7 +347,7 @@ async def test_setup_entry_creates_sensors(hass: HomeAssistant) -> None:
         hass, entry, lambda e: _add_entities(e, added_entities)
     )
 
-    assert len(added_entities) == 9
+    assert len(added_entities) == 11
     assert all(isinstance(e, MyTNBSensor) for e in added_entities)
 
 
@@ -363,7 +367,7 @@ async def test_setup_entry_no_data(hass: HomeAssistant) -> None:
         hass, entry, lambda e: _add_entities(e, added_entities)
     )
 
-    assert len(added_entities) == 9
+    assert len(added_entities) == 11
     assert all(e.available is False for e in added_entities)
 
 
@@ -406,8 +410,8 @@ async def test_setup_entry_multiple_accounts(hass: HomeAssistant) -> None:
         hass, entry, lambda e: _add_entities(e, added_entities)
     )
 
-    # 2 accounts × 9 sensors = 18
-    assert len(added_entities) == 18
+    # 2 accounts × 11 sensors = 22
+    assert len(added_entities) == 22
     account_numbers = {e.account_number for e in added_entities}
     assert account_numbers == {"111", "333"}
 
@@ -424,3 +428,66 @@ async def test_setup_entry_no_configured_accounts(hass: HomeAssistant) -> None:
     )
 
     assert len(added_entities) == 0
+
+
+def _sensor(key: str, data=None) -> MyTNBSensor:
+    description = next(d for d in SENSOR_DESCRIPTIONS if d.key == key)
+    return MyTNBSensor(make_coordinator_mock(data), description, "220123456789")
+
+
+async def test_money_is_in_myr() -> None:
+    """Monetary sensors use the ISO 4217 code, and the migration list matches them."""
+    from homeassistant.components.sensor import SensorDeviceClass
+
+    monetary = [
+        d for d in SENSOR_DESCRIPTIONS if d.device_class == SensorDeviceClass.MONETARY
+    ]
+    assert {d.native_unit_of_measurement for d in monetary} == {"MYR"}
+    assert {d.key for d in monetary} == set(MONETARY_SENSOR_KEYS)
+
+
+async def test_meter_reading(hass: HomeAssistant) -> None:
+    """The meter reading is the kWh register from the latest bill."""
+    sensor = _sensor("meter_reading")
+
+    assert sensor.native_value == 10319
+    attrs = sensor.extra_state_attributes
+    assert attrs[ATTR_BILL_DATE] == date(2026, 5, 15)
+    assert [r["unit"] for r in attrs[ATTR_METER_READINGS]] == ["kWh", "kW"]
+    assert attrs[ATTR_METER_READINGS][0] == {
+        "meter_number": "SIE1052308047669",
+        "unit": "kWh",
+        "previous_reading": 9750,
+        "current_reading": 10319,
+        "usage": 569,
+    }
+
+
+async def test_meter_reading_without_readings(hass: HomeAssistant) -> None:
+    """No readings (no PDF, or a layout the library can't read) means unknown."""
+    data = create_mock_account_data()
+    data["220123456789"]["meter_readings"] = []
+    sensor = _sensor("meter_reading", data)
+
+    assert sensor.native_value is None
+    attrs = sensor.extra_state_attributes
+    assert ATTR_METER_READINGS not in attrs
+    assert ATTR_BILL_DATE not in attrs
+
+
+async def test_estimated_meter_reading(hass: HomeAssistant) -> None:
+    """The estimate adds this cycle's usage to the billed reading."""
+    sensor = _sensor("estimated_meter_reading")
+
+    assert sensor.native_value == 10439  # 10319 + 120
+    assert sensor.extra_state_attributes[ATTR_BILL_DATE] == date(2026, 5, 15)
+    assert sensor.entity_description.entity_registry_enabled_default is False
+    assert sensor.entity_description.state_class is None
+
+
+async def test_estimated_meter_reading_needs_usage(hass: HomeAssistant) -> None:
+    """Without this cycle's usage there is no estimate."""
+    data = create_mock_account_data()
+    data["220123456789"]["usage"].current_usage_kwh = None
+
+    assert _sensor("estimated_meter_reading", data).native_value is None

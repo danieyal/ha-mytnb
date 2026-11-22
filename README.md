@@ -6,7 +6,8 @@ A Home Assistant custom integration for [myTNB](https://www.mytnb.com.my). Monit
 
 - **Account auto-discovery**: one login discovers all linked TNB accounts
 - **Usage tracking**: current, average, and last completed month's kWh consumption
-- **Cost monitoring**: current, projected, and last completed month's billing in RM
+- **Cost monitoring**: current, projected, and last completed month's billing in MYR
+- **Meter reading**: the meter's kWh register from your latest bill
 - **Bill history**: last payment date/amount, outstanding balance
 - **Smart meter support**: SMR status per account
 - **Rich attributes**: daily breakdown, tariff blocks, full bill history
@@ -43,19 +44,31 @@ Copy `custom_components/mytnb/` into your Home Assistant `custom_components/` di
 
 For each discovered account (e.g. `220123456789`):
 
-| Sensor                                   | Unit | Description                        |
-| ---------------------------------------- | ---- | ---------------------------------- |
-| `sensor.mytnb_<acc>_current_usage`       | kWh  | Current billing period usage       |
-| `sensor.mytnb_<acc>_average_usage`       | kWh  | Average daily usage                |
-| `sensor.mytnb_<acc>_current_cost`        | RM   | Current billing period cost        |
-| `sensor.mytnb_<acc>_projected_cost`      | RM   | Projected billing period cost      |
-| `sensor.mytnb_<acc>_last_month_usage`    | kWh  | Last completed billing month usage |
-| `sensor.mytnb_<acc>_last_month_cost`     | RM   | Last completed billing month cost  |
-| `sensor.mytnb_<acc>_due_amount`          | RM   | Outstanding balance                |
-| `sensor.mytnb_<acc>_last_payment_amount` | RM   | Last payment amount                |
-| `sensor.mytnb_<acc>_last_payment_date`   | date | Last payment date                  |
+| Sensor                                       | Unit | Description                                      |
+| -------------------------------------------- | ---- | ------------------------------------------------ |
+| `sensor.mytnb_<acc>_current_usage`           | kWh  | Current billing period usage                     |
+| `sensor.mytnb_<acc>_average_usage`           | kWh  | Average daily usage                              |
+| `sensor.mytnb_<acc>_current_cost`            | MYR  | Current billing period cost                      |
+| `sensor.mytnb_<acc>_projected_cost`          | MYR  | Projected billing period cost                    |
+| `sensor.mytnb_<acc>_last_month_usage`        | kWh  | Last completed billing month usage               |
+| `sensor.mytnb_<acc>_last_month_cost`         | MYR  | Last completed billing month cost                |
+| `sensor.mytnb_<acc>_due_amount`              | MYR  | Outstanding balance                              |
+| `sensor.mytnb_<acc>_last_payment_amount`     | MYR  | Last payment amount                              |
+| `sensor.mytnb_<acc>_last_payment_date`       | date | Last payment date                                |
+| `sensor.mytnb_<acc>_meter_reading`           | kWh  | Meter reading on the latest bill                 |
+| `sensor.mytnb_<acc>_estimated_meter_reading` | kWh  | Billed reading plus usage since (off by default) |
 
 Each sensor includes attributes for account details, daily usage, tariff blocks, and bill history.
+
+Money is in MYR, the ISO 4217 code Home Assistant expects, so the frontend formats it as currency. Versions before 1.5.0 used "RM"; updating relabels the statistics already recorded, so their history carries on.
+
+### Meter reading
+
+myTNB's API doesn't report the meter's own register reading; only the bill shows it. The integration downloads the bill PDF once per new bill and reads its meter table ("Maklumat Meter"). The **Meter reading** sensor is the kWh register at the end of the billed period, and its `meter_readings` attribute lists every register on the bill (kWh, plus kW and kVARh on some tariffs) with the previous reading and the usage billed.
+
+**Estimated meter reading** adds this billing period's usage to that reading. It is off by default and keeps no long-term statistics: the bill and the usage figure update separately, so around bill day the sum can be a month off for a while.
+
+If a new bill gives no readings (its PDF isn't ready yet, or TNB changed the layout), the sensors keep the previous bill's readings, the `bill_date` attribute shows which bill they came from, and the log says the bill has no meter readings this version can read. The integration tries that bill again once a day. The other sensors are unaffected.
 
 ## Requirements
 

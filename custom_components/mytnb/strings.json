@@ -70,6 +70,12 @@
       },
       "last_payment_date": {
         "name": "Last payment date"
+      },
+      "meter_reading": {
+        "name": "Meter reading"
+      },
+      "estimated_meter_reading": {
+        "name": "Estimated meter reading"
       }
     }
   }
