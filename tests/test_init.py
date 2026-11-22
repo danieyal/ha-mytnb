@@ -208,55 +208,71 @@ async def test_migrate_entry_unknown(hass: HomeAssistant) -> None:
     assert result is False
 
 
-async def test_migrate_entry_currency_without_recorder(hass: HomeAssistant) -> None:
-    """Without the recorder nothing is relabelled, but the entry still migrates."""
-    entry = MockConfigEntry(
-        domain=DOMAIN, version=2, minor_version=1, data=_BASE_ENTRY_DATA
-    )
-    entry.add_to_hass(hass)
 
-    with patch(
-        "custom_components.mytnb.async_migrate_currency", AsyncMock()
-    ) as migrate:
-        assert await async_migrate_entry(hass, entry) is True
-
-    migrate.assert_not_awaited()
-    assert entry.minor_version == 2
-
-
-async def test_migrate_entry_currency_failure_still_loads(hass: HomeAssistant) -> None:
-    """A failed relabel is logged, and the entry still migrates."""
+async def test_setup_relabels_currency_first(hass: HomeAssistant) -> None:
+    """Setup relabels RM statistics before the coordinator's first refresh."""
     hass.config.components.add("recorder")
-    entry = MockConfigEntry(
-        domain=DOMAIN, version=2, minor_version=1, data=_BASE_ENTRY_DATA
-    )
+    entry = MockConfigEntry(domain=DOMAIN, version=2, data=_BASE_ENTRY_DATA)
     entry.add_to_hass(hass)
-
-    with patch(
-        "custom_components.mytnb.async_migrate_currency",
-        AsyncMock(side_effect=RuntimeError("database locked")),
-    ):
-        assert await async_migrate_entry(hass, entry) is True
-
-    assert entry.minor_version == 2
-
-
-async def test_migrate_entry_v1_also_migrates_currency(hass: HomeAssistant) -> None:
-    """A v1 entry ends up at 2.2 in one migration."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        version=1,
-        minor_version=1,
-        data={CONF_EMAIL: "test@example.com", CONF_PASSWORD: "testpassword"},
+    order: list[str] = []
+    coordinator = MagicMock(
+        async_config_entry_first_refresh=AsyncMock(
+            side_effect=lambda: order.append("refresh")
+        )
     )
-    entry.add_to_hass(hass)
 
-    with patch(
-        "custom_components.mytnb._validate_login",
-        AsyncMock(
-            return_value=[{CONF_ACCOUNT_NUMBER: "111111111111", CONF_OWNER_NAME: "A"}]
+    with (
+        patch(
+            "custom_components.mytnb.async_relabel_currency",
+            AsyncMock(side_effect=lambda hass, ids: order.append("relabel")),
+        ) as relabel,
+        patch(
+            "custom_components.mytnb.MyTNBDataUpdateCoordinator",
+            return_value=coordinator,
         ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
     ):
-        assert await async_migrate_entry(hass, entry) is True
+        assert await async_setup_entry(hass, entry) is True
 
-    assert (entry.version, entry.minor_version) == (2, 2)
+    assert order == ["relabel", "refresh"]
+    assert relabel.await_args.args[1] == {"mytnb:220123456789_daily_cost"}
+
+
+async def test_setup_without_recorder_skips_relabel(hass: HomeAssistant) -> None:
+    """Without the recorder there is nothing to relabel."""
+    entry = MockConfigEntry(domain=DOMAIN, version=2, data=_BASE_ENTRY_DATA)
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.mytnb.async_relabel_currency", AsyncMock()
+        ) as relabel,
+        patch(
+            "custom_components.mytnb.MyTNBDataUpdateCoordinator",
+            return_value=MagicMock(async_config_entry_first_refresh=AsyncMock()),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    relabel.assert_not_awaited()
+
+
+async def test_setup_survives_relabel_failure(hass: HomeAssistant) -> None:
+    """A failed relabel is logged, and setup carries on."""
+    hass.config.components.add("recorder")
+    entry = MockConfigEntry(domain=DOMAIN, version=2, data=_BASE_ENTRY_DATA)
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.mytnb.async_relabel_currency",
+            AsyncMock(side_effect=RuntimeError("database locked")),
+        ),
+        patch(
+            "custom_components.mytnb.MyTNBDataUpdateCoordinator",
+            return_value=MagicMock(async_config_entry_first_refresh=AsyncMock()),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+    ):
+        assert await async_setup_entry(hass, entry) is True

@@ -19,7 +19,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import MyTNBDataUpdateCoordinator
-from .statistics import async_migrate_currency, daily_statistic_id
+from .statistics import async_relabel_currency, daily_statistic_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +31,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: MyTNBConfigEntry) -> boo
     email = entry.data[CONF_EMAIL]
     password = entry.data[CONF_PASSWORD]
     accounts: list[dict[str, str]] = entry.data.get(CONF_ACCOUNTS, [])
+
+    await _async_relabel_currency(hass, entry)
 
     coordinator = MyTNBDataUpdateCoordinator(hass, email, password, accounts)
     await coordinator.async_config_entry_first_refresh()
@@ -103,21 +105,18 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             len(accounts),
         )
 
-    if entry.minor_version < 2:
-        # 2.2 (1.5.0): money is reported in MYR instead of RM.
-        await _async_migrate_currency(hass, entry)
-        hass.config_entries.async_update_entry(entry, minor_version=2)
-
     return True
 
 
-async def _async_migrate_currency(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Relabel this entry's stored RM statistics as MYR.
+async def _async_relabel_currency(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Relabel the stored RM statistics of this entry's accounts as MYR.
 
-    Runs before the sensors first report MYR, so the recorder keeps compiling
-    their statistics instead of stopping at the unit change. A failure only
-    means the user gets the recorder's own repair for the affected sensors, so
-    it must not stop the entry from loading.
+    Versions before 1.5.0 reported money in RM. This runs on every setup,
+    before the sensors report MYR, so it also covers an account that is
+    selected again later. The recorder then keeps compiling their statistics
+    instead of stopping at the unit change. A failure only means the user gets
+    the recorder's own repair for the affected sensors, so it must not stop
+    the entry from loading.
     """
     if "recorder" not in hass.config.components:
         return
@@ -133,7 +132,7 @@ async def _async_migrate_currency(hass: HomeAssistant, entry: ConfigEntry) -> No
             if entity_id:
                 statistic_ids.add(entity_id)
     try:
-        await async_migrate_currency(hass, statistic_ids)
+        await async_relabel_currency(hass, statistic_ids)
     except Exception:  # noqa: BLE001 - see docstring
         _LOGGER.warning(
             "Could not relabel myTNB statistics from RM to MYR; Home Assistant "

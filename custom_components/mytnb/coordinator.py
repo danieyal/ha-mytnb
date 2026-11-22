@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import Any, TypeVar
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 import mytnb
 from mytnb.exceptions import APIError, AuthenticationError, MyTNBError
@@ -21,6 +23,7 @@ from .const import (
     DEFAULT_RETRY_BACKOFF_FACTOR,
     DEFAULT_RETRY_BASE_DELAY,
     DOMAIN,
+    METER_READINGS_RETRY,
 )
 from .retry import with_retry
 from .statistics import async_import_daily_statistics
@@ -65,8 +68,10 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         self._retry_base_delay = DEFAULT_RETRY_BASE_DELAY
         self._retry_backoff_factor = DEFAULT_RETRY_BACKOFF_FACTOR
         # Meter readings come from the bill PDF and only change with a new
-        # bill, so keep them per account with the bill they were read from.
+        # bill, so keep the last ones per account with the bill they were read
+        # from, and when a newer bill gave none, its number and when it was tried.
         self._meter_readings: dict[str, tuple[Any, list[Any]]] = {}
+        self._unread_bills: dict[str, tuple[str, datetime]] = {}
 
     @property
     def account_numbers(self) -> list[str]:
@@ -263,15 +268,25 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
         account_ref: Any,
         bill_history: list[Any],
     ) -> tuple[Any, list[Any]]:
-        """Return ``(bill, readings)`` for the latest bill.
+        """Return ``(bill, readings)`` from the latest bill that had readings.
 
-        The bill PDF is only downloaded when a new bill appears. Failures keep
-        the previous readings: they are extras that must not fail the account.
+        The bill PDF is only downloaded when a new bill appears. A bill that
+        gives no readings (no PDF yet, or a layout this version can't read) is
+        tried again after METER_READINGS_RETRY, and until then the previous
+        bill's readings stay. Failures also keep them: readings are extras
+        that must not fail the account.
         """
         cached = self._meter_readings.get(account_number, (None, []))
         latest = next((bill for bill in bill_history if bill.billing_no), None)
         if latest is None or (
             cached[0] is not None and cached[0].billing_no == latest.billing_no
+        ):
+            return cached
+        unread = self._unread_bills.get(account_number)
+        if (
+            unread is not None
+            and unread[0] == latest.billing_no
+            and dt_util.utcnow() - unread[1] < METER_READINGS_RETRY
         ):
             return cached
 
@@ -289,10 +304,16 @@ class MyTNBDataUpdateCoordinator(DataUpdateCoordinator):
             return cached
 
         if not readings:
-            _LOGGER.warning(
-                "Bill %s of account %s has no meter readings this version can read",
-                latest.billing_no,
-                account_number,
-            )
+            if unread is None or unread[0] != latest.billing_no:
+                _LOGGER.warning(
+                    "Bill %s of account %s has no meter readings this version "
+                    "can read; trying again daily",
+                    latest.billing_no,
+                    account_number,
+                )
+            self._unread_bills[account_number] = (latest.billing_no, dt_util.utcnow())
+            return cached
+
+        self._unread_bills.pop(account_number, None)
         self._meter_readings[account_number] = (latest, readings)
         return latest, readings

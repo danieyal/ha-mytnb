@@ -20,7 +20,6 @@ from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
-    async_update_statistics_metadata,
     get_last_statistics,
     get_metadata,
 )
@@ -29,6 +28,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .const import CURRENCY, DOMAIN, LEGACY_CURRENCY
+
+try:
+    from homeassistant.components.recorder.statistics import (
+        async_update_statistics_metadata,
+    )
+except ImportError:  # Home Assistant before 2025.11
+    async_update_statistics_metadata = None
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -166,23 +172,29 @@ def _as_timestamp(value: Any) -> float | None:
     return value.timestamp()
 
 
-async def async_migrate_currency(hass: HomeAssistant, statistic_ids: set[str]) -> None:
+async def async_relabel_currency(hass: HomeAssistant, statistic_ids: set[str]) -> None:
     """Relabel stored statistics from ``RM`` to ``MYR``.
 
     Both name the same currency, so the values stay as they are. Without this,
     the recorder stops compiling statistics for a sensor whose unit changes to
     one it cannot convert from, and raises a repair until the user fixes it.
     """
-    metadata = await get_instance(hass).async_add_executor_job(
+    recorder = get_instance(hass)
+    metadata = await recorder.async_add_executor_job(
         partial(get_metadata, hass, statistic_ids=statistic_ids)
     )
     for statistic_id, (_, meta) in metadata.items():
         if meta["unit_of_measurement"] != LEGACY_CURRENCY:
             continue
-        async_update_statistics_metadata(
-            hass,
-            statistic_id,
-            new_unit_class=None,
-            new_unit_of_measurement=CURRENCY,
-        )
+        if async_update_statistics_metadata is not None:
+            async_update_statistics_metadata(
+                hass,
+                statistic_id,
+                new_unit_class=None,
+                new_unit_of_measurement=CURRENCY,
+            )
+        else:  # Home Assistant before 2025.11 has no unit classes
+            recorder.async_update_statistics_metadata(
+                statistic_id, new_unit_of_measurement=CURRENCY
+            )
         _LOGGER.debug("Relabelled %s statistics from RM to MYR", statistic_id)

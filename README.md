@@ -68,7 +68,7 @@ myTNB's API doesn't report the meter's own register reading; only the bill shows
 
 **Estimated meter reading** adds this billing period's usage to that reading. It is off by default and keeps no long-term statistics: the bill and the usage figure update separately, so around bill day the sum can be a month off for a while.
 
-If TNB changes the bill layout, both sensors become unknown and the log says the bill has no meter readings this version can read. The other sensors are unaffected.
+If a new bill gives no readings (its PDF isn't ready yet, or TNB changed the layout), the sensors keep the previous bill's readings, the `bill_date` attribute shows which bill they came from, and the log says the bill has no meter readings this version can read. The integration tries that bill again once a day. The other sensors are unaffected.
 
 ## Requirements
 

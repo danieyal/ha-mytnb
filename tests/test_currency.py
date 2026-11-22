@@ -1,9 +1,10 @@
-"""Tests for the RM → MYR statistics migration, against a real recorder."""
+"""Tests for relabelling RM statistics as MYR, against a real recorder."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 from functools import partial
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components.recorder import get_instance
@@ -26,8 +27,9 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
-from custom_components.mytnb import async_migrate_entry
+from custom_components.mytnb import _async_relabel_currency
 from custom_components.mytnb.const import CONF_ACCOUNTS, DOMAIN
+from custom_components.mytnb.statistics import async_relabel_currency
 from tests.conftest import make_account_dict
 
 _ENTRY_DATA = {
@@ -70,8 +72,8 @@ def _seed_statistic(hass: HomeAssistant, statistic_id: str, unit: str) -> None:
         async_add_external_statistics(hass, metadata, rows)
 
 
-async def test_migrate_entry_relabels_rm_statistics(hass: HomeAssistant) -> None:
-    """2.1 → 2.2 relabels the entry's RM statistics as MYR, leaving others alone."""
+async def test_relabels_rm_statistics(hass: HomeAssistant) -> None:
+    """The entry's RM statistics become MYR; other units and entities stay."""
     registry = er.async_get(hass)
     cost = registry.async_get_or_create(
         "sensor", DOMAIN, f"{DOMAIN}_220123456789_current_cost"
@@ -94,16 +96,12 @@ async def test_migrate_entry_relabels_rm_statistics(hass: HomeAssistant) -> None
     _seed_statistic(hass, other, "RM")
     await async_wait_recording_done(hass)
 
-    entry = MockConfigEntry(
-        domain=DOMAIN, version=2, minor_version=1, data=_ENTRY_DATA
-    )
+    entry = MockConfigEntry(domain=DOMAIN, version=2, data=_ENTRY_DATA)
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await _async_relabel_currency(hass, entry)
     await async_wait_recording_done(hass)
 
-    assert entry.version == 2
-    assert entry.minor_version == 2
     assert await _statistics_units(
         hass, {cost, due, usage, daily_cost, daily_energy, other}
     ) == {
@@ -115,3 +113,23 @@ async def test_migrate_entry_relabels_rm_statistics(hass: HomeAssistant) -> None
         other: "RM",
     }
 
+
+
+async def test_relabel_before_2025_11(hass: HomeAssistant) -> None:
+    """Before 2025.11 the recorder's own method relabels, without a unit class."""
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(
+        return_value={"sensor.cost": (1, {"unit_of_measurement": "RM"})}
+    )
+
+    with (
+        patch("custom_components.mytnb.statistics.get_instance", return_value=instance),
+        patch(
+            "custom_components.mytnb.statistics.async_update_statistics_metadata", None
+        ),
+    ):
+        await async_relabel_currency(hass, {"sensor.cost"})
+
+    instance.async_update_statistics_metadata.assert_called_once_with(
+        "sensor.cost", new_unit_of_measurement="MYR"
+    )

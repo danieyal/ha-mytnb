@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
-from mytnb.models import BillHistoryEntry
+from mytnb.models import BillHistoryEntry, MeterReading
 
 from custom_components.mytnb.coordinator import MyTNBDataUpdateCoordinator
 from tests.conftest import (
@@ -484,3 +485,44 @@ async def test_coordinator_meter_readings_without_bills(
     mock_client.get_meter_readings.assert_not_awaited()
     assert data["220123456789"]["meter_readings"] == []
     assert data["220123456789"]["meter_readings_bill"] is None
+
+
+async def test_coordinator_retries_unread_bill_daily(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A bill without readings keeps the previous ones and is retried daily."""
+    mock_client = create_mock_client()
+    coordinator = _make_coordinator(hass)
+    coordinator._client = mock_client
+    coordinator.data = await coordinator._async_update_data()
+
+    # A new bill whose PDF isn't available yet (or can't be read).
+    mock_client.get_bill_history.return_value = [
+        BillHistoryEntry(billing_no="12346", amount=90.0)
+    ]
+    mock_client.get_meter_readings.return_value = []
+    data = await coordinator._async_update_data()
+    assert mock_client.get_meter_readings.await_count == 2
+    assert data["220123456789"]["meter_readings_bill"].billing_no == "12345"
+    assert len(data["220123456789"]["meter_readings"]) == 2
+
+    # Hourly polls within the day don't download it again.
+    freezer.tick(timedelta(hours=23))
+    await coordinator._async_update_data()
+    assert mock_client.get_meter_readings.await_count == 2
+
+    # A day later it is tried again, and now has readings.
+    freezer.tick(timedelta(hours=2))
+    mock_client.get_meter_readings.return_value = [
+        MeterReading(
+            meter_number="SIE1052308047669",
+            unit="kWh",
+            previous_reading=10319,
+            current_reading=10800,
+            usage=481,
+        )
+    ]
+    data = await coordinator._async_update_data()
+    assert mock_client.get_meter_readings.await_count == 3
+    assert data["220123456789"]["meter_readings_bill"].billing_no == "12346"
+    assert data["220123456789"]["meter_readings"][0].current_reading == 10800

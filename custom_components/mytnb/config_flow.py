@@ -100,7 +100,6 @@ class MyTNBConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for myTNB."""
 
     VERSION = 2
-    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the config flow."""

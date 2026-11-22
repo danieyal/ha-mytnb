@@ -20,6 +20,10 @@ CONF_IS_OWNED = "is_owned"
 
 DEFAULT_POLL_INTERVAL = timedelta(hours=1)
 
+# How long to wait before reading a bill again when it gave no meter readings
+# (no PDF yet, or a meter table this version can't read).
+METER_READINGS_RETRY = timedelta(days=1)
+
 # Money is reported with its ISO 4217 code. myTNB itself says "RM", which is
 # what versions before 1.5.0 used; the config entry migration relabels stored
 # statistics from LEGACY_CURRENCY to CURRENCY.
